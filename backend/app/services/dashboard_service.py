@@ -1,7 +1,7 @@
 """Dashboard service: stats + recent tasks + component status + task instances."""
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
@@ -36,8 +36,8 @@ async def get_stats(db: AsyncSession) -> dict:
         select(
             func.date_trunc("day", TaskInstance.created_at).label("day"),
             func.count(TaskInstance.id).label("count"),
-            func.sum(func.case((TaskInstance.status == "success", 1), else_=0)).label("success"),
-            func.sum(func.case((TaskInstance.status == "failed", 1), else_=0)).label("failed"),
+            func.sum(case((TaskInstance.status == "success", 1), else_=0)).label("success"),
+            func.sum(case((TaskInstance.status == "failed", 1), else_=0)).label("failed"),
         )
         .where(TaskInstance.created_at >= seven_days_ago)
         .group_by("day")
