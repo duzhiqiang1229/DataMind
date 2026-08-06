@@ -32,14 +32,8 @@
             <el-button size="small" :icon="Clock" @click="openHistoryDialog">历史</el-button>
           </div>
 
-          <!-- SQL Editor -->
-          <el-input
-            v-model="sqlText"
-            type="textarea"
-            :rows="10"
-            placeholder="输入 SELECT 语句..."
-            class="sql-editor"
-          />
+          <!-- SQL Editor (CodeMirror) -->
+          <div ref="editorRef" class="sql-editor"></div>
 
           <!-- Results -->
           <div v-if="queryResult" class="query-result">
@@ -109,10 +103,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, reactive } from "vue";
+import { ref, watch, onMounted, onBeforeUnmount, reactive } from "vue";
 import { Search, VideoPlay, Document, Clock } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { queryApi } from "@/api";
+import CodeMirror from "codemirror";
+import "codemirror/lib/codemirror.css";
+import "codemirror/mode/sql/sql";
+import "codemirror/addon/hint/show-hint";
+import "codemirror/addon/hint/sql-hint";
+import "codemirror/addon/edit/matchbrackets";
+import "codemirror/addon/edit/closebrackets";
+import "codemirror/theme/material-darker.css";
+// CodeMirror type declarations not available; using any
 
 interface TreeNode {
   name: string;
@@ -137,6 +140,10 @@ const executing = ref(false);
 const queryResult = ref<QueryResult | null>(null);
 const treeData = ref<TreeNode[]>([]);
 
+// CodeMirror
+const editorRef = ref<HTMLElement | null>(null);
+let cmInstance: any = null;
+
 const saveDialogVisible = ref(false);
 const saveForm = reactive({
   query_name: "",
@@ -152,23 +159,96 @@ watch(searchKeyword, (val) => {
   treeRef.value?.filter(val);
 });
 
+// Update CodeMirror hint tables when currentDatabase changes
+watch(currentDatabase, async (db) => {
+  if (!db) return;
+  await loadTables(db);
+  if (cmInstance) {
+    const tables: Record<string, string[]> = {};
+    for (const node of treeData.value) {
+      if (node.children) {
+        for (const child of node.children) {
+          tables[child.name] = [];
+        }
+      } else {
+        tables[node.name] = [];
+      }
+    }
+    cmInstance.setOption("hintOptions", { tables });
+  }
+});
+
 onMounted(async () => {
+  // Initialize CodeMirror
+  if (editorRef.value) {
+    const tables: Record<string, string[]> = {};
+    cmInstance = CodeMirror(editorRef.value, {
+      value: sqlText.value,
+      mode: "text/x-sql",
+      theme: "material-darker",
+      lineNumbers: true,
+      matchBrackets: true,
+      autoCloseBrackets: true,
+      hintOptions: { tables },
+      extraKeys: {
+        "Ctrl-Space": "autocomplete",
+        "Ctrl-Enter": () => {
+          executeQuery();
+        },
+      },
+    });
+
+    // Sync CodeMirror changes back to sqlText
+    cmInstance.on("change", (instance: any) => {
+      sqlText.value = instance.getValue();
+    });
+  }
+
   try {
     const res = await queryApi.listDatabases();
-    databases.value = (res || []).map((name: any) => ({ name: typeof name === 'string' ? name : name.name }));
+    databases.value = (res || []).map((name: any) => ({ name: typeof name === "string" ? name : name.name }));
     if (databases.value.length > 0) {
       currentDatabase.value = databases.value[0].name;
       await loadTables(currentDatabase.value);
+      // Populate hint tables after initial load
+      if (cmInstance) {
+        const hintTables: Record<string, string[]> = {};
+        for (const node of treeData.value) {
+          if (node.children) {
+            for (const child of node.children) {
+              hintTables[child.name] = [];
+            }
+          } else {
+            hintTables[node.name] = [];
+          }
+        }
+        cmInstance.setOption("hintOptions", { tables: hintTables });
+      }
     }
   } catch {
     // API not ready
   }
 });
 
+onBeforeUnmount(() => {
+  if (cmInstance) {
+    // Wrap in try/catch since some CodeMirror versions can throw on cleanup
+    try {
+      const wrapper = (cmInstance as any).getWrapperElement?.();
+      if (wrapper && wrapper.parentNode) {
+        wrapper.parentNode.removeChild(wrapper);
+      }
+    } catch {
+      // ignore
+    }
+    cmInstance = null;
+  }
+});
+
 async function loadTables(database: string) {
   try {
     const res = await queryApi.listTables(database);
-    const tables = (res || []).map((t: any) => ({ name: typeof t === 'string' ? t : t.name }));
+    const tables = (res || []).map((t: any) => ({ name: typeof t === "string" ? t : t.name }));
     treeData.value = [{ name: database, children: tables }];
   } catch {
     treeData.value = [];
@@ -181,7 +261,11 @@ function onDatabaseChange(db: string) {
 
 function handleNodeClick(data: TreeNode) {
   if (data.children) return;
-  sqlText.value = `SELECT * FROM ${currentDatabase.value}.${data.name} LIMIT 100;`;
+  const sql = `SELECT * FROM ${currentDatabase.value}.${data.name} LIMIT 100;`;
+  sqlText.value = sql;
+  if (cmInstance) {
+    cmInstance.setValue(sql);
+  }
 }
 
 function filterNode(value: string, data: any) {
@@ -190,13 +274,14 @@ function filterNode(value: string, data: any) {
 }
 
 async function executeQuery() {
-  if (!sqlText.value.trim()) {
+  const sql = cmInstance ? cmInstance.getValue() : sqlText.value;
+  if (!sql.trim()) {
     ElMessage.warning("请输入SQL语句");
     return;
   }
   executing.value = true;
   try {
-    const res = await queryApi.execute(sqlText.value, currentDatabase.value, limit.value);
+    const res = await queryApi.execute(sql, currentDatabase.value, limit.value);
     queryResult.value = res;
     ElMessage.success(`查询成功,返回 ${res.row_count} 行`);
   } catch {
@@ -218,10 +303,11 @@ async function handleSaveQuery() {
     ElMessage.warning("请输入查询名称");
     return;
   }
+  const sql = cmInstance ? cmInstance.getValue() : sqlText.value;
   try {
     await queryApi.saveQuery({
       query_name: saveForm.query_name,
-      sql_text: sqlText.value,
+      sql_text: sql,
       database: currentDatabase.value,
       description: saveForm.description,
       tags: saveForm.tags,
@@ -266,9 +352,11 @@ async function loadHistory() {
 }
 
 .sql-editor {
-  :deep(.el-textarea__inner) {
+  :deep(.CodeMirror) {
     font-family: "Courier New", monospace;
     font-size: 14px;
+    height: auto;
+    min-height: 220px;
   }
 }
 

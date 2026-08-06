@@ -75,6 +75,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "数据目录", icon: "Collection" },
       },
       {
+        path: "assets/lineage",
+        name: "DataLineage",
+        component: () => import("@/views/assets/lineage/index.vue"),
+        meta: { title: "血缘关系", icon: "Share" },
+      },
+      {
+        path: "data-service",
+        name: "DataService",
+        component: () => import("@/views/data-service/index.vue"),
+        meta: { title: "数据服务", icon: "Share" },
+      },
+      {
         path: "system/user",
         name: "UserManagement",
         component: () => import("@/views/system/user/index.vue"),
@@ -85,6 +97,12 @@ const routes: RouteRecordRaw[] = [
         name: "RoleManagement",
         component: () => import("@/views/system/role/index.vue"),
         meta: { title: "角色管理", icon: "UserFilled" },
+      },
+      {
+        path: "system/permission",
+        name: "PermissionManagement",
+        component: () => import("@/views/system/permission/index.vue"),
+        meta: { title: "权限管理", icon: "Key" },
       },
       {
         path: "system/component",
