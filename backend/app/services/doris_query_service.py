@@ -167,3 +167,168 @@ def _history_to_dict(h: QueryHistory) -> dict:
         "executed_by": str(h.executed_by) if h.executed_by else None,
         "executed_at": h.executed_at.isoformat() if h.executed_at else None,
     }
+
+
+# --- storage monitoring ---
+
+_STORAGE_OVERVIEW_SQL = (
+    "SELECT TABLE_SCHEMA, COUNT(*) as table_count, "
+    "SUM(TABLE_ROWS) as total_rows, "
+    "ROUND(SUM(DATA_LENGTH)/1024/1024, 2) as size_mb "
+    "FROM information_schema.tables GROUP BY TABLE_SCHEMA"
+)
+
+
+async def get_storage_overview(db: AsyncSession) -> dict:
+    """Database-level storage overview.
+
+    Tries information_schema first; falls back to list_databases + list_tables.
+    """
+    doris = await get_doris_client(db)
+
+    # Try information_schema approach
+    try:
+        result = await doris.execute_query(_STORAGE_OVERVIEW_SQL, None, 10000)
+        if result.get("columns"):
+            databases = []
+            col_idx = {col.lower(): i for i, col in enumerate(result["columns"])}
+            for row in result["rows"]:
+                schema = row[col_idx["table_schema"]]
+                if not schema or schema.lower() in ("information_schema", "mysql", "__internal_schema"):
+                    continue
+                databases.append({
+                    "name": schema,
+                    "table_count": int(row[col_idx["table_count"]] or 0),
+                    "total_rows": int(row[col_idx["total_rows"]] or 0),
+                    "total_size_mb": float(row[col_idx["size_mb"]] or 0.0),
+                })
+            return {"databases": databases}
+    except Exception as e:
+        logger.warning(f"information_schema storage query failed, falling back: {e}")
+
+    # Fallback: iterate databases and tables
+    db_names = await doris.list_databases()
+    databases = []
+    for db_name in db_names:
+        if db_name.lower() in ("information_schema", "mysql", "__internal_schema"):
+            continue
+        try:
+            tables = await doris.list_tables(db_name)
+        except Exception as e:
+            logger.warning(f"Failed to list tables for {db_name}: {e}")
+            tables = []
+
+        total_rows = 0
+        total_size_mb = 0.0
+        for t in tables:
+            try:
+                total_rows += int(t.get("rows") or 0)
+            except (TypeError, ValueError):
+                pass
+            try:
+                total_size_mb += float(t.get("data_size") or 0.0)
+            except (TypeError, ValueError):
+                pass
+
+        databases.append({
+            "name": db_name,
+            "table_count": len(tables),
+            "total_rows": total_rows,
+            "total_size_mb": round(total_size_mb, 2),
+        })
+
+    return {"databases": databases}
+
+
+async def get_table_stats(db: AsyncSession, database: str, table: str) -> dict:
+    """Detailed statistics for a single table."""
+    doris = await get_doris_client(db)
+
+    stats: dict = {
+        "name": table,
+        "engine": None,
+        "rows": 0,
+        "data_size": 0,
+        "create_time": None,
+        "columns": 0,
+    }
+
+    # Use list_tables output (SHOW TABLE STATUS) for base stats
+    try:
+        tables = await doris.list_tables(database)
+        for t in tables:
+            if t.get("name") == table:
+                stats.update({
+                    "name": t.get("name", table),
+                    "engine": t.get("engine"),
+                    "rows": t.get("rows", 0),
+                    "data_size": t.get("data_size", 0),
+                    "create_time": t.get("create_time"),
+                })
+                break
+    except Exception as e:
+        logger.warning(f"Failed to get table status for {database}.{table}: {e}")
+
+    # Column count via schema
+    try:
+        schema = await doris.get_table_schema(database, table)
+        stats["columns"] = len(schema)
+    except Exception as e:
+        logger.warning(f"Failed to get schema for {database}.{table}: {e}")
+
+    # Partition info
+    partitions: list[dict] = []
+    try:
+        partitions = await get_table_partitions(db, database, table)
+    except Exception as e:
+        logger.warning(f"Failed to get partitions for {database}.{table}: {e}")
+    stats["partitions"] = partitions
+    stats["partition_count"] = len(partitions)
+
+    return stats
+
+
+async def get_table_partitions(db: AsyncSession, database: str, table: str) -> list[dict]:
+    """Partition details via SHOW PARTITIONS."""
+    doris = await get_doris_client(db)
+    sql = f"SHOW PARTITIONS FROM {database}.{table}"
+    result = await doris.execute_query(sql, None, 10000)
+
+    if not result.get("columns") or not result.get("rows"):
+        return []
+
+    columns = result["columns"]
+    col_idx = {col.lower(): i for i, col in enumerate(columns)}
+
+    partitions = []
+    for row in result["rows"]:
+        part: dict = {}
+        # Map common Apache Doris SHOW PARTITIONS columns
+        for field in (
+            "partition_name", "partition_key", "partition_value",
+            "rows", "data_size", "visible_version",
+            "visible_version_time", "visible_version_hash",
+        ):
+            idx = col_idx.get(field)
+            if idx is not None:
+                part[field] = row[idx]
+
+        # Normalize commonly expected keys
+        if "partition_name" in part:
+            part["name"] = part["partition_name"]
+        if "data_size" in part:
+            try:
+                part["data_size"] = float(part["data_size"] or 0)
+            except (TypeError, ValueError):
+                pass
+        if "rows" in part:
+            try:
+                part["rows"] = int(part["rows"] or 0)
+            except (TypeError, ValueError):
+                pass
+
+        # Include all raw columns for completeness
+        part["raw"] = {columns[i]: row[i] for i in range(len(columns))}
+        partitions.append(part)
+
+    return partitions

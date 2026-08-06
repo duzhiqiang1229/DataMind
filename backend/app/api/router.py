@@ -17,6 +17,8 @@ from app.api.v1 import (
     system,
     cube,
     openmetadata,
+    airflow,
+    data_service,
 )
 
 api_router = APIRouter()
@@ -49,3 +51,7 @@ api_router.include_router(system.router, prefix="/system", tags=["系统管理"]
 # Metrics & Governance
 api_router.include_router(cube.router, prefix="/cube", tags=["指标中心"])
 api_router.include_router(openmetadata.router, prefix="/openmetadata", tags=["数据治理"])
+api_router.include_router(airflow.router, prefix="/airflow", tags=["Airflow调度"])
+
+# Data Service Center
+api_router.include_router(data_service.router, prefix="/data-services", tags=["数据服务"])

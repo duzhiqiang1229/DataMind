@@ -128,3 +128,50 @@ async def get_query_history(history_id: str, db: AsyncSession = Depends(get_db),
     if not result:
         return ResponseOK(code=404, message="History not found")
     return ResponseOK(data=result)
+
+
+# ============================================================
+# 存储监控
+# ============================================================
+
+@router.get("/storage", response_model=ResponseOK[dict], summary="存储概览")
+async def get_storage_overview(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """数据库级存储概览: 每库表数、总行数、总大小。"""
+    try:
+        result = await doris_query_service.get_storage_overview(db)
+        return ResponseOK(data=result)
+    except Exception as e:
+        return ResponseOK(code=500, message=str(e))
+
+
+@router.get("/databases/{database}/tables/{table}/stats", response_model=ResponseOK[dict], summary="表统计信息")
+async def get_table_stats(
+    database: str,
+    table: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """单表详细统计: 引擎、行数、大小、列数、分区信息。"""
+    try:
+        result = await doris_query_service.get_table_stats(db, database, table)
+        return ResponseOK(data=result)
+    except Exception as e:
+        return ResponseOK(code=500, message=str(e))
+
+
+@router.get("/databases/{database}/tables/{table}/partitions", response_model=ResponseOK[list[dict]], summary="分区详情")
+async def get_table_partitions(
+    database: str,
+    table: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """表分区详情: 分区名、行数、数据大小等。"""
+    try:
+        result = await doris_query_service.get_table_partitions(db, database, table)
+        return ResponseOK(data=result)
+    except Exception as e:
+        return ResponseOK(code=500, message=str(e))

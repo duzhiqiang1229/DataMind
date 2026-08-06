@@ -63,6 +63,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "库表浏览", icon: "FolderOpened" },
       },
       {
+        path: "warehouse/storage",
+        name: "StorageMonitor",
+        component: () => import("@/views/warehouse/storage/index.vue"),
+        meta: { title: "存储监控", icon: "Coin" },
+      },
+      {
         path: "metrics",
         name: "MetricsCenter",
         component: () => import("@/views/metrics/index.vue"),
@@ -127,6 +133,12 @@ const routes: RouteRecordRaw[] = [
         name: "TaskMonitor",
         component: () => import("@/views/schedule/monitor/index.vue"),
         meta: { title: "任务监控", icon: "Timer" },
+      },
+      {
+        path: "schedule/dag",
+        name: "DagManagement",
+        component: () => import("@/views/schedule/dag/index.vue"),
+        meta: { title: "DAG 管理", icon: "Connection" },
       },
     ],
   },

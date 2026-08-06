@@ -8,19 +8,11 @@
         </div>
       </template>
 
-      <el-alert
-        type="warning"
-        :closable="false"
-        style="margin-bottom: 16px;"
-      >
-        数据服务功能正在开发中，当前为演示模式
-      </el-alert>
-
-      <el-table :data="tableData" border>
+      <el-table :data="tableData" border v-loading="loading">
         <el-table-column prop="api_name" label="API 名称" min-width="140" />
         <el-table-column prop="api_path" label="路径" min-width="180">
           <template #default="{ row }">
-            <el-tag :type="row.method === 'GET' ? 'success' : 'primary'" size="small" style="margin-right: 6px;">
+            <el-tag :type="methodTagType(row.method)" size="small" style="margin-right: 6px;">
               {{ row.method }}
             </el-tag>
             <span>{{ row.api_path }}</span>
@@ -34,6 +26,12 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="call_count" label="调用次数" width="100" />
+        <el-table-column label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }: { row: any }">
             <el-button text type="primary" @click="handleTest(row)">测试</el-button>
@@ -43,7 +41,18 @@
         </el-table-column>
       </el-table>
 
-      <el-empty v-if="tableData.length === 0" description="暂无数据服务 API，点击「新增 API」创建" />
+      <div class="pagination-wrapper">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next, jumper"
+          background
+          @size-change="fetchList"
+          @current-change="fetchList"
+        />
+      </div>
     </el-card>
 
     <!-- 新增/编辑对话框 -->
@@ -68,6 +77,9 @@
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" :rows="2" placeholder="API 功能描述" />
+        </el-form-item>
+        <el-form-item label="数据库">
+          <el-input v-model="form.database" placeholder="如 analytics_db" />
         </el-form-item>
         <el-form-item label="SQL 模板" prop="sql_template">
           <el-input
@@ -104,19 +116,22 @@
     </el-dialog>
 
     <!-- 测试对话框 -->
-    <el-dialog v-model="testDialogVisible" title="API 测试" width="700px">
+    <el-dialog v-model="testDialogVisible" title="API 测试" width="800px" @close="onTestClose">
       <div v-if="currentTestApi">
         <el-descriptions :column="1" border size="small" style="margin-bottom: 16px;">
           <el-descriptions-item label="API">{{ currentTestApi.api_name }}</el-descriptions-item>
           <el-descriptions-item label="路径">
-            <el-tag :type="currentTestApi.method === 'GET' ? 'success' : 'primary'" size="small">
+            <el-tag :type="methodTagType(currentTestApi.method)" size="small" style="margin-right: 6px;">
               {{ currentTestApi.method }}
             </el-tag>
             {{ currentTestApi.api_path }}
           </el-descriptions-item>
+          <el-descriptions-item v-if="currentTestApi.database" label="数据库">
+            {{ currentTestApi.database }}
+          </el-descriptions-item>
         </el-descriptions>
 
-        <el-form label-width="100px" v-if="testParams.length > 0">
+        <el-form label-width="120px" v-if="testParams.length > 0">
           <el-form-item
             v-for="param in testParams"
             :key="param.name"
@@ -135,18 +150,40 @@
         <div class="test-response">
           <div class="response-header">
             <span>响应结果</span>
-            <el-button
-              v-if="testResult"
-              text
-              type="primary"
-              size="small"
-              @click="testResult = null"
-            >
-              清除
-            </el-button>
+            <span v-if="testResult" class="response-meta">
+              <el-tag size="small" type="info">{{ testResult.row_count }} 行</el-tag>
+              <el-tag size="small" type="success" style="margin-left: 6px;">{{ testResult.elapsed_ms }} ms</el-tag>
+              <el-tag v-if="testResult.truncated" size="small" type="warning" style="margin-left: 6px;">已截断</el-tag>
+            </span>
           </div>
-          <pre v-if="testResult" class="response-body">{{ testResult }}</pre>
-          <el-empty v-else description="点击「执行」查看结果" :image-size="40" />
+
+          <el-table
+            v-if="testResult && testResult.rows.length > 0"
+            :data="testResult.rows"
+            border
+            max-height="400"
+            style="margin-top: 8px;"
+          >
+            <el-table-column
+              v-for="col in testResult.columns"
+              :key="col"
+              :prop="col"
+              :label="col"
+              min-width="120"
+              show-overflow-tooltip
+            />
+          </el-table>
+
+          <el-empty
+            v-else-if="testResult"
+            description="查询结果为空"
+            :image-size="40"
+          />
+          <el-empty
+            v-else
+            description="点击「执行」查看结果"
+            :image-size="40"
+          />
         </div>
       </div>
 
@@ -159,9 +196,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from "vue";
+import { ref, reactive, onMounted } from "vue";
 import { Plus, Delete } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";
+import { dataServiceApi } from "@/api";
 
 interface ApiParameter {
   name: string;
@@ -174,10 +212,13 @@ interface DataServiceApi {
   api_name: string;
   api_path: string;
   method: "GET" | "POST";
-  status: "active" | "inactive";
+  status: string;
   description: string;
   sql_template: string;
   parameters: ApiParameter[];
+  database: string;
+  call_count: number;
+  created_at: string;
 }
 
 interface TestParam {
@@ -187,64 +228,81 @@ interface TestParam {
   value: string;
 }
 
-const tableData = ref<DataServiceApi[]>([
-  {
-    id: "1",
-    api_name: "get_user_orders",
-    api_path: "/api/orders/users/{user_id}",
-    method: "GET",
-    status: "active",
-    description: "查询指定用户的订单列表",
-    sql_template: "SELECT * FROM orders WHERE user_id = {{user_id}} LIMIT {{limit}}",
-    parameters: [
-      { name: "user_id", type: "integer", required: true },
-      { name: "limit", type: "integer", required: false },
-    ],
-  },
-  {
-    id: "2",
-    api_name: "get_product_detail",
-    api_path: "/api/products/{product_id}",
-    method: "GET",
-    status: "active",
-    description: "获取商品详情信息",
-    sql_template: "SELECT * FROM products WHERE id = {{product_id}}",
-    parameters: [
-      { name: "product_id", type: "integer", required: true },
-    ],
-  },
-  {
-    id: "3",
-    api_name: "create_order",
-    api_path: "/api/orders",
-    method: "POST",
-    status: "inactive",
-    description: "创建新订单",
-    sql_template: "INSERT INTO orders (user_id, product_id, quantity) VALUES ({{user_id}}, {{product_id}}, {{quantity}})",
-    parameters: [
-      { name: "user_id", type: "integer", required: true },
-      { name: "product_id", type: "integer", required: true },
-      { name: "quantity", type: "integer", required: false },
-    ],
-  },
-]);
+interface ExecuteResult {
+  columns: string[];
+  rows: Record<string, any>[];
+  row_count: number;
+  truncated: boolean;
+  elapsed_ms: number;
+}
 
+type TagType = "primary" | "success" | "warning" | "info" | "danger";
+
+// ---------- Table & pagination ----------
+const tableData = ref<DataServiceApi[]>([]);
+const loading = ref(false);
+const page = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
+
+async function fetchList() {
+  loading.value = true;
+  try {
+    const res = await dataServiceApi.list({
+      page: page.value,
+      page_size: pageSize.value,
+    }) as { items: DataServiceApi[]; total: number };
+    tableData.value = res.items || [];
+    total.value = res.total || 0;
+  } catch {
+    // error already handled by interceptor
+  } finally {
+    loading.value = false;
+  }
+}
+
+function methodTagType(method: string): TagType {
+  return method === "GET" ? "success" : "primary";
+}
+
+function formatDateTime(dateStr: string): string {
+  if (!dateStr) return "-";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+// ---------- Create/Edit dialog ----------
 const dialogVisible = ref(false);
 const isEdit = ref(false);
 const submitting = ref(false);
 const editId = ref("");
 const formRef = ref<FormInstance>();
 
-const defaultForm = {
+interface FormState {
+  api_name: string;
+  api_path: string;
+  method: "GET" | "POST";
+  description: string;
+  sql_template: string;
+  database: string;
+  parameters: ApiParameter[];
+}
+
+const form = reactive<FormState>({
   api_name: "",
   api_path: "",
-  method: "GET" as "GET" | "POST",
+  method: "GET",
   description: "",
   sql_template: "",
-  parameters: [] as ApiParameter[],
-};
-
-const form = reactive<{ api_name: string; api_path: string; method: "GET" | "POST"; description: string; sql_template: string; parameters: ApiParameter[] }>({ ...defaultForm, parameters: [] });
+  database: "",
+  parameters: [],
+});
 
 const formRules = {
   api_name: [{ required: true, message: "请输入 API 名称", trigger: "blur" }],
@@ -253,35 +311,38 @@ const formRules = {
   sql_template: [{ required: true, message: "请输入 SQL 模板", trigger: "blur" }],
 };
 
-const testDialogVisible = ref(false);
-const currentTestApi = ref<DataServiceApi | null>(null);
-const testParams = ref<TestParam[]>([]);
-const testResult = ref<string | null>(null);
-const testing = ref(false);
-
-let idCounter = 4;
+function resetFormState() {
+  form.api_name = "";
+  form.api_path = "";
+  form.method = "GET";
+  form.description = "";
+  form.sql_template = "";
+  form.database = "";
+  form.parameters = [];
+}
 
 function handleAdd() {
   isEdit.value = false;
-  Object.assign(form, defaultForm, { parameters: [] });
-  form.parameters = [];
+  resetFormState();
   dialogVisible.value = true;
 }
 
-function handleEdit(row: DataServiceApi) {
+async function handleEdit(row: DataServiceApi) {
   isEdit.value = true;
   editId.value = row.id;
-  Object.assign(form, {
-    api_name: row.api_name,
-    api_path: row.api_path,
-    method: row.method,
-    description: row.description || "",
-    sql_template: row.sql_template || "",
-    status: row.status,
-    parameters: [],
-  });
-  form.parameters = row.parameters.map((p) => ({ ...p }));
-  dialogVisible.value = true;
+  try {
+    const detail = await dataServiceApi.detail(row.id) as DataServiceApi;
+    form.api_name = detail.api_name || "";
+    form.api_path = detail.api_path || "";
+    form.method = detail.method || "GET";
+    form.description = detail.description || "";
+    form.sql_template = detail.sql_template || "";
+    form.database = detail.database || "";
+    form.parameters = (detail.parameters || []).map((p) => ({ ...p }));
+    dialogVisible.value = true;
+  } catch {
+    // error handled by interceptor
+  }
 }
 
 function addParam() {
@@ -299,36 +360,26 @@ async function handleSubmit() {
     submitting.value = true;
     try {
       const validParams = form.parameters.filter((p) => p.name.trim());
+      const payload = {
+        api_name: form.api_name,
+        api_path: form.api_path,
+        method: form.method,
+        description: form.description,
+        sql_template: form.sql_template,
+        database: form.database,
+        parameters: validParams,
+      };
       if (isEdit.value) {
-        const idx = tableData.value.findIndex((r) => r.id === editId.value);
-        if (idx > -1) {
-          tableData.value[idx] = {
-            ...tableData.value[idx],
-            api_name: form.api_name,
-            api_path: form.api_path,
-            method: form.method,
-            description: form.description,
-            sql_template: form.sql_template,
-            parameters: validParams,
-          };
-        }
+        await dataServiceApi.update(editId.value, payload);
         ElMessage.success("更新成功");
       } else {
-        tableData.value.push({
-          id: String(idCounter++),
-          api_name: form.api_name,
-          api_path: form.api_path,
-          method: form.method,
-          status: "active",
-          description: form.description,
-          sql_template: form.sql_template,
-          parameters: validParams,
-        });
+        await dataServiceApi.create(payload);
         ElMessage.success("创建成功");
       }
       dialogVisible.value = false;
+      fetchList();
     } catch {
-      /* handled */
+      // error handled by interceptor
     } finally {
       submitting.value = false;
     }
@@ -336,17 +387,26 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: DataServiceApi) {
-  await ElMessageBox.confirm(`确认删除 API "${row.api_name}"?`, "提示", { type: "warning" });
-  const idx = tableData.value.findIndex((r) => r.id === row.id);
-  if (idx > -1) {
-    tableData.value.splice(idx, 1);
+  try {
+    await ElMessageBox.confirm(`确认删除 API "${row.api_name}"?`, "提示", { type: "warning" });
+    await dataServiceApi.delete(row.id);
     ElMessage.success("删除成功");
+    fetchList();
+  } catch {
+    // user cancelled or error handled by interceptor
   }
 }
 
+// ---------- Test dialog ----------
+const testDialogVisible = ref(false);
+const currentTestApi = ref<DataServiceApi | null>(null);
+const testParams = ref<TestParam[]>([]);
+const testResult = ref<ExecuteResult | null>(null);
+const testing = ref(false);
+
 function handleTest(row: DataServiceApi) {
   currentTestApi.value = row;
-  testParams.value = row.parameters.map((p) => ({
+  testParams.value = (row.parameters || []).map((p) => ({
     name: p.name,
     type: p.type,
     required: p.required,
@@ -356,10 +416,15 @@ function handleTest(row: DataServiceApi) {
   testDialogVisible.value = true;
 }
 
+function onTestClose() {
+  currentTestApi.value = null;
+  testParams.value = [];
+  testResult.value = null;
+}
+
 async function handleExecuteTest() {
   if (!currentTestApi.value) return;
 
-  // Validate required params
   const missing = testParams.value.filter((p) => p.required && !p.value.trim());
   if (missing.length > 0) {
     ElMessage.warning(`必填参数缺失: ${missing.map((p) => p.name).join(", ")}`);
@@ -367,36 +432,26 @@ async function handleExecuteTest() {
   }
 
   testing.value = true;
+  testResult.value = null;
   try {
-    // Simulate API execution (backend not yet connected)
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
-    const params: Record<string, string> = {};
+    const params: Record<string, any> = {};
     testParams.value.forEach((p) => {
-      if (p.value.trim()) params[p.name] = p.value;
+      if (p.value.trim()) {
+        params[p.name] = p.value;
+      }
     });
 
-    const mockResponse = {
-      code: 0,
-      message: "success",
-      data: {
-        api: currentTestApi.value.api_name,
-        method: currentTestApi.value.method,
-        path: currentTestApi.value.api_path,
-        parameters: params,
-        rows: [
-          { id: 1, name: "示例数据 1", created_at: "2025-01-15 10:30:00" },
-          { id: 2, name: "示例数据 2", created_at: "2025-01-15 11:00:00" },
-        ],
-        total: 2,
-      },
-      note: "演示模式：后端接口尚未对接，返回模拟数据",
+    const result = await dataServiceApi.execute(currentTestApi.value.id, params) as ExecuteResult;
+    testResult.value = {
+      columns: result.columns || [],
+      rows: result.rows || [],
+      row_count: result.row_count ?? 0,
+      truncated: result.truncated ?? false,
+      elapsed_ms: result.elapsed_ms ?? 0,
     };
-
-    testResult.value = JSON.stringify(mockResponse, null, 2);
-    ElMessage.success("执行完成（模拟数据）");
+    ElMessage.success("执行完成");
   } catch {
-    /* handled */
+    // error handled by interceptor
   } finally {
     testing.value = false;
   }
@@ -404,9 +459,13 @@ async function handleExecuteTest() {
 
 function resetForm() {
   formRef.value?.resetFields();
-  Object.assign(form, defaultForm);
-  form.parameters = [];
+  resetFormState();
 }
+
+// ---------- Init ----------
+onMounted(() => {
+  fetchList();
+});
 </script>
 
 <style lang="scss" scoped>
@@ -415,6 +474,12 @@ function resetForm() {
     display: flex;
     justify-content: space-between;
     align-items: center;
+  }
+
+  .pagination-wrapper {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
   }
 
   .param-list {
@@ -438,18 +503,8 @@ function resetForm() {
       color: #303133;
     }
 
-    .response-body {
-      max-height: 300px;
-      overflow-y: auto;
-      background: #1e1e1e;
-      color: #d4d4d4;
-      padding: 12px;
-      border-radius: 4px;
-      font-family: monospace;
-      font-size: 13px;
-      white-space: pre-wrap;
-      word-break: break-all;
-      margin: 0;
+    .response-meta {
+      font-weight: normal;
     }
   }
 }

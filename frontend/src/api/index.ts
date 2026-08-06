@@ -339,4 +339,76 @@ export const openmetadataApi = {
   },
 };
 
+// ============================================================
+// Data Service API
+// ============================================================
+export const dataServiceApi = {
+  list(params: { page: number; page_size: number; status?: string }) {
+    return request.get("/data-services", { params });
+  },
+  create(data: any) {
+    return request.post("/data-services", data);
+  },
+  detail(id: string) {
+    return request.get(`/data-services/${id}`);
+  },
+  update(id: string, data: any) {
+    return request.put(`/data-services/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/data-services/${id}`);
+  },
+  execute(id: string, params: Record<string, any>) {
+    return request.post(`/data-services/${id}/execute`, { params });
+  },
+};
+
+// ============================================================
+// Airflow API
+// ============================================================
+export const airflowApi = {
+  listDags(limit = 100, offset = 0) {
+    return request.get("/airflow", { params: { limit, offset } });
+  },
+  getDag(dagId: string) {
+    return request.get(`/airflow/${dagId}`);
+  },
+  pauseDag(dagId: string) {
+    return request.post(`/airflow/${dagId}/pause`);
+  },
+  resumeDag(dagId: string) {
+    return request.post(`/airflow/${dagId}/resume`);
+  },
+  triggerDag(dagId: string, conf: any = {}) {
+    return request.post(`/airflow/${dagId}/trigger`, { conf });
+  },
+  listDagRuns(dagId: string, limit = 50, offset = 0) {
+    return request.get(`/airflow/${dagId}/runs`, { params: { limit, offset } });
+  },
+  getDagRunDetail(dagId: string, runId: string) {
+    return request.get(`/airflow/${dagId}/runs/${runId}`);
+  },
+  getDagRunLog(dagId: string, runId: string, taskId: string, tryNumber = 1) {
+    return request.get(`/airflow/${dagId}/runs/${runId}/log`, { params: { task_id: taskId, try_number: tryNumber } });
+  },
+  retryDagRun(dagId: string, runId: string, taskId: string) {
+    return request.post(`/airflow/${dagId}/runs/${runId}/retry`, { task_id: taskId });
+  },
+};
+
+// ============================================================
+// Doris Storage API
+// ============================================================
+export const dorisStorageApi = {
+  overview() {
+    return request.get("/doris-query/storage");
+  },
+  tableStats(database: string, table: string) {
+    return request.get(`/doris-query/databases/${database}/tables/${table}/stats`);
+  },
+  partitions(database: string, table: string) {
+    return request.get(`/doris-query/databases/${database}/tables/${table}/partitions`);
+  },
+};
+
 export { authApi as default };

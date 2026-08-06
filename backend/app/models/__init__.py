@@ -9,11 +9,12 @@ from app.models.data_model import DataModel, DataModelField, DataModelVersion
 from app.models.publish import PublishTask, PublishRecord
 from app.models.query import SavedQuery, QueryHistory
 from app.models.system import SystemConfig, OperationLog
+from app.models.data_service import DataServiceApi
 
 __all__ = [
     "User", "Role", "Permission", "UserRole", "RolePermission", "Menu", "RoleMenu",
     "ComponentConfig", "DataSource", "DataXTask", "DataXFieldMapping", "SparkTask",
     "TaskInstance", "DataModel", "DataModelField", "DataModelVersion",
     "PublishTask", "PublishRecord", "SavedQuery", "QueryHistory",
-    "SystemConfig", "OperationLog",
+    "SystemConfig", "OperationLog", "DataServiceApi",
 ]

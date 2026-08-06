@@ -15,4 +15,6 @@ from app.services import (
     system_service,
     cube_service,
     openmetadata_service,
+    airflow_service,
+    data_service,
 )

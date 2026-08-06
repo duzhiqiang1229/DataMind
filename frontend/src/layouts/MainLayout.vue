@@ -48,6 +48,7 @@
               <span>数据仓库</span>
             </template>
             <el-menu-item index="/warehouse/browse">库表浏览</el-menu-item>
+            <el-menu-item index="/warehouse/storage">存储监控</el-menu-item>
           </el-sub-menu>
 
           <!-- 调度中心 -->
@@ -57,6 +58,7 @@
               <span>调度中心</span>
             </template>
             <el-menu-item index="/schedule/monitor">任务监控</el-menu-item>
+            <el-menu-item index="/schedule/dag">DAG 管理</el-menu-item>
           </el-sub-menu>
 
           <!-- 数据资产 -->
