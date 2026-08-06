@@ -5,7 +5,9 @@
       <el-col :span="6" v-for="card in statCards" :key="card.title">
         <el-card shadow="hover">
           <div class="stat-card">
-            <el-icon :size="32" :color="card.color"><component :is="card.icon" /></el-icon>
+            <el-icon :size="32" :color="card.color">
+              <component :is="card.icon" />
+            </el-icon>
             <div class="stat-info">
               <div class="stat-value">{{ card.value }}</div>
               <div class="stat-title">{{ card.title }}</div>
@@ -61,20 +63,34 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, shallowRef } from "vue";
 import * as echarts from "echarts";
 import { dashboardApi } from "@/api";
 
-const statCards = ref([
+interface StatCard {
+  title: string;
+  value: number;
+  icon: string;
+  color: string;
+}
+
+interface ComponentItem {
+  code: string;
+  name: string;
+  healthy: boolean;
+}
+
+const statCards = ref<StatCard[]>([
   { title: "数据源", value: 0, icon: "Coin", color: "#409eff" },
   { title: "DataX任务", value: 0, icon: "Sort", color: "#67c23a" },
   { title: "今日执行", value: 0, icon: "VideoPlay", color: "#e6a23c" },
   { title: "今日查询", value: 0, icon: "Monitor", color: "#f56c6c" },
 ]);
 
-const recentTasks = ref([]);
-const components = ref([]);
+const recentTasks = ref<any[]>([]);
+const components = ref<ComponentItem[]>([]);
 const trendChartRef = ref<HTMLElement>();
+const chartInstance = shallowRef<echarts.ECharts>();
 
 onMounted(async () => {
   try {
@@ -89,13 +105,13 @@ onMounted(async () => {
     statCards.value[2].value = stats.today_executions || 0;
     statCards.value[3].value = stats.today_queries || 0;
 
-    recentTasks.value = tasks;
-    components.value = compStatus;
+    recentTasks.value = tasks || [];
+    components.value = compStatus || [];
 
     // Render trend chart
     if (trendChartRef.value) {
-      const chart = echarts.init(trendChartRef.value);
-      chart.setOption({
+      chartInstance.value = echarts.init(trendChartRef.value);
+      chartInstance.value.setOption({
         tooltip: { trigger: "axis" },
         legend: { data: ["成功", "失败"] },
         xAxis: { type: "category", data: stats.trend?.dates || [] },
@@ -111,8 +127,10 @@ onMounted(async () => {
   }
 });
 
-function statusType(status: string) {
-  const map: Record<string, string> = {
+type TagType = "primary" | "success" | "warning" | "info" | "danger";
+
+function statusType(status: string): TagType {
+  const map: Record<string, TagType> = {
     success: "success",
     failed: "danger",
     running: "warning",

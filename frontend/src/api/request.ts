@@ -1,15 +1,15 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
+import axios, { type AxiosRequestConfig } from "axios";
 import { ElMessage } from "element-plus";
 import NProgress from "nprogress";
 
-const request: AxiosInstance = axios.create({
+const instance = axios.create({
   baseURL: "/api/v1",
   timeout: 30000,
   headers: { "Content-Type": "application/json" },
 });
 
 // Request interceptor: attach JWT token
-request.interceptors.request.use(
+instance.interceptors.request.use(
   (config) => {
     NProgress.start();
     // Pinia persisted state stores under store id "auth" as JSON
@@ -33,7 +33,7 @@ request.interceptors.request.use(
 );
 
 // Response interceptor: unwrap data, handle errors
-request.interceptors.response.use(
+instance.interceptors.response.use(
   (response) => {
     NProgress.done();
     const data = response.data;
@@ -79,5 +79,13 @@ request.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Typed wrapper: interceptor unwraps response.data.data, so return Promise<T>
+const request = {
+  get: <T = any>(url: string, config?: AxiosRequestConfig) => instance.get(url, config) as unknown as Promise<T>,
+  post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => instance.post(url, data, config) as unknown as Promise<T>,
+  put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig) => instance.put(url, data, config) as unknown as Promise<T>,
+  delete: <T = any>(url: string, config?: AxiosRequestConfig) => instance.delete(url, config) as unknown as Promise<T>,
+};
 
 export default request;
