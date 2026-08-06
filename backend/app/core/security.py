@@ -3,22 +3,30 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import bcrypt
 import jwt
 from cryptography.fernet import Fernet
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-# --- Password hashing ---
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+# --- Password hashing (bcrypt, max 72 bytes) ---
+_BCRYPT_MAX_BYTES = 72
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt. Truncates to 72 bytes (bcrypt limit)."""
+    pw_bytes = password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    return bcrypt.hashpw(pw_bytes, bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    """Verify a plaintext password against a bcrypt hash."""
+    pw_bytes = plain.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+    hashed_bytes = hashed.encode("utf-8")
+    try:
+        return bcrypt.checkpw(pw_bytes, hashed_bytes)
+    except (ValueError, TypeError):
+        return False
 
 
 # --- JWT token ---
