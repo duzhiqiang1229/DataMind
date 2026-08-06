@@ -71,7 +71,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
 import { Refresh } from "@element-plus/icons-vue";
-import request from "@/api/request";
+import { dashboardApi } from "@/api";
 
 type TagType = "primary" | "success" | "warning" | "info" | "danger";
 
@@ -91,20 +91,22 @@ const statCards = ref([
 async function loadData() {
   loading.value = true;
   try {
-    // Use dashboard stats for overview counts
-    const stats = await request.get("/dashboard/stats");
+    const [stats, res] = await Promise.all([
+      dashboardApi.stats(),
+      dashboardApi.taskInstances({
+        page: pagination.page,
+        page_size: pagination.page_size,
+        task_type: searchType.value || undefined,
+        status: searchStatus.value || undefined,
+      }),
+    ]);
+    tableData.value = res.items || [];
+    pagination.total = res.total || 0;
+
     statCards.value[0].value = stats.today_executions || 0;
-    // Load recent tasks as the table data
-    const tasks = await request.get("/dashboard/recent-tasks", { params: { limit: 50 } });
-    let data = tasks || [];
-    if (searchType.value) data = data.filter((t: any) => t.task_type === searchType.value);
-    if (searchStatus.value) data = data.filter((t: any) => t.status === searchStatus.value);
-    tableData.value = data;
-    pagination.total = data.length;
-    // Update stat cards
-    statCards.value[1].value = data.filter((t: any) => t.status === "success").length;
-    statCards.value[2].value = data.filter((t: any) => t.status === "failed").length;
-    statCards.value[3].value = data.filter((t: any) => t.status === "running").length;
+    statCards.value[1].value = tableData.value.filter((t: any) => t.status === "success").length;
+    statCards.value[2].value = tableData.value.filter((t: any) => t.status === "failed").length;
+    statCards.value[3].value = tableData.value.filter((t: any) => t.status === "running").length;
   } catch { /* handled */ } finally {
     loading.value = false;
   }

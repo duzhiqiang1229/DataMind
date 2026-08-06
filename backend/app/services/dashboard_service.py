@@ -1,11 +1,11 @@
-"""Dashboard service: stats + recent tasks + component status."""
+"""Dashboard service: stats + recent tasks + component status + task instances."""
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
-from app.models import DataSource, DataXTask, TaskInstance, QueryHistory, ComponentConfig
+from app.models import DataSource, DataXTask, SparkTask, TaskInstance, QueryHistory, ComponentConfig
 from app.services.component_service import get_airflow_client, get_doris_client, get_cube_client, get_openmetadata_client
 
 
@@ -15,11 +15,10 @@ async def get_stats(db: AsyncSession) -> dict:
 
     # data sources
     ds_total = (await db.execute(select(func.count(DataSource.id)))).scalar_one()
-    ds_active = (await db.execute(select(func.count(DataSource.id)).where(DataSource.status == "active"))).scalar_one()
 
-    # datax tasks
-    task_total = (await db.execute(select(func.count(DataXTask.id)))).scalar_one()
-    task_active = (await db.execute(select(func.count(DataXTask.id)).where(DataXTask.status == "active"))).scalar_one()
+    # datax + spark tasks
+    datax_total = (await db.execute(select(func.count(DataXTask.id)))).scalar_one()
+    spark_total = (await db.execute(select(func.count(SparkTask.id)))).scalar_one()
 
     # today's executions
     today_executions = (await db.execute(
@@ -44,17 +43,19 @@ async def get_stats(db: AsyncSession) -> dict:
         .group_by("day")
         .order_by("day")
     )
-    trend = [
-        {"date": str(row.day)[:10], "total": row.count, "success": row.success or 0, "failed": row.failed or 0}
-        for row in trend_result
-    ]
+    rows = trend_result.all()
+    trend = {
+        "dates": [str(r.day)[:10] for r in rows],
+        "success": [r.success or 0 for r in rows],
+        "failed": [r.failed or 0 for r in rows],
+    }
 
     return {
-        "data_sources": {"total": ds_total, "active": ds_active},
-        "datax_tasks": {"total": task_total, "active": task_active},
+        "total_datasources": ds_total,
+        "total_datax_tasks": datax_total + spark_total,
         "today_executions": today_executions,
         "today_queries": today_queries,
-        "sync_trend": trend,
+        "trend": trend,
     }
 
 
@@ -77,11 +78,52 @@ async def get_recent_tasks(db: AsyncSession, limit: int = 10) -> list[dict]:
             "started_at": t.started_at.isoformat() if t.started_at else None,
             "ended_at": t.ended_at.isoformat() if t.ended_at else None,
             "duration_seconds": t.duration_seconds,
+            "rows_read": t.rows_read,
             "rows_written": t.rows_written,
             "created_at": t.created_at.isoformat() if t.created_at else None,
         }
         for t in tasks
     ]
+
+
+async def list_task_instances(
+    db: AsyncSession, page: int, page_size: int,
+    task_type: str | None = None, status: str | None = None,
+) -> tuple[list[dict], int]:
+    """Paginated task instances for task monitor page."""
+    query = select(TaskInstance)
+    count_q = select(func.count(TaskInstance.id))
+    if task_type:
+        query = query.where(TaskInstance.task_type == task_type)
+        count_q = count_q.where(TaskInstance.task_type == task_type)
+    if status:
+        query = query.where(TaskInstance.status == status)
+        count_q = count_q.where(TaskInstance.status == status)
+
+    total = (await db.execute(count_q)).scalar_one()
+    result = await db.execute(
+        query.order_by(TaskInstance.created_at.desc())
+        .offset((page - 1) * page_size).limit(page_size)
+    )
+    instances = result.scalars().all()
+    items = [
+        {
+            "id": str(t.id),
+            "task_type": t.task_type,
+            "task_id": str(t.task_id),
+            "dag_id": t.dag_id,
+            "dag_run_id": t.dag_run_id,
+            "status": t.status,
+            "started_at": t.started_at.isoformat() if t.started_at else None,
+            "ended_at": t.ended_at.isoformat() if t.ended_at else None,
+            "duration_seconds": t.duration_seconds,
+            "rows_read": t.rows_read,
+            "rows_written": t.rows_written,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in instances
+    ]
+    return items, total
 
 
 async def get_component_status(db: AsyncSession) -> list[dict]:
@@ -96,9 +138,9 @@ async def get_component_status(db: AsyncSession) -> list[dict]:
     for cfg in components:
         healthy = cfg.last_check_ok
         status_list.append({
-            "component_code": cfg.component_code,
-            "component_name": cfg.component_name,
-            "component_type": cfg.component_type,
+            "code": cfg.component_code,
+            "name": cfg.component_name,
+            "type": cfg.component_type,
             "base_url": cfg.base_url,
             "healthy": healthy,
             "last_check_at": cfg.last_check_at.isoformat() if cfg.last_check_at else None,

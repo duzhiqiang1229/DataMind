@@ -40,6 +40,10 @@
           <el-icon><Promotion /></el-icon>
           <span>发布管理</span>
         </el-menu-item>
+        <el-menu-item index="/warehouse/browse">
+          <el-icon><FolderOpened /></el-icon>
+          <span>库表浏览</span>
+        </el-menu-item>
         <el-menu-item index="/schedule/monitor">
           <el-icon><Timer /></el-icon>
           <span>任务监控</span>

@@ -277,6 +277,9 @@ export const dashboardApi = {
   recentTasks(limit = 10) {
     return request.get("/dashboard/recent-tasks", { params: { limit } });
   },
+  taskInstances(params: { page: number; page_size: number; task_type?: string; status?: string }) {
+    return request.get("/dashboard/task-instances", { params });
+  },
   componentStatus() {
     return request.get("/dashboard/component-status");
   },

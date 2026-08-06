@@ -57,6 +57,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "发布管理", icon: "Promotion" },
       },
       {
+        path: "warehouse/browse",
+        name: "WarehouseBrowse",
+        component: () => import("@/views/warehouse/browse/index.vue"),
+        meta: { title: "库表浏览", icon: "FolderOpened" },
+      },
+      {
         path: "system/user",
         name: "UserManagement",
         component: () => import("@/views/system/user/index.vue"),
