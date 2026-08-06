@@ -59,6 +59,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Operation logging middleware (logs POST/PUT/DELETE operations)
+from app.utils.operation_log_middleware import OperationLogMiddleware
+app.add_middleware(OperationLogMiddleware)
+
 # Register API routes
 app.include_router(api_router, prefix="/api/v1")
 
