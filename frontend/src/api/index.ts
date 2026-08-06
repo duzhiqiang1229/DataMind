@@ -300,4 +300,43 @@ export const systemApi = {
   },
 };
 
+// ============================================================
+// Cube Metrics API
+// ============================================================
+export const cubeApi = {
+  meta() {
+    return request.get("/cube/meta");
+  },
+  load(query: any) {
+    return request.post("/cube/load", query);
+  },
+  health() {
+    return request.get("/cube/health");
+  },
+};
+
+// ============================================================
+// OpenMetadata API
+// ============================================================
+export const openmetadataApi = {
+  databases(limit = 100) {
+    return request.get("/openmetadata/databases", { params: { limit } });
+  },
+  tables(database?: string, limit = 100) {
+    return request.get("/openmetadata/tables", { params: { database, limit } });
+  },
+  tableDetail(fqn: string) {
+    return request.get(`/openmetadata/tables/${fqn}`);
+  },
+  lineage(fqn: string, entity_type = "table") {
+    return request.get("/openmetadata/lineage", { params: { fqn, entity_type } });
+  },
+  search(q: string, limit = 20) {
+    return request.get("/openmetadata/search", { params: { q, limit } });
+  },
+  health() {
+    return request.get("/openmetadata/health");
+  },
+};
+
 export { authApi as default };

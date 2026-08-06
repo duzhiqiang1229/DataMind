@@ -15,6 +15,8 @@ from app.api.v1 import (
     publish,
     dashboard,
     system,
+    cube,
+    openmetadata,
 )
 
 api_router = APIRouter()
@@ -43,3 +45,7 @@ api_router.include_router(publish.router, prefix="/publish", tags=["发布管理
 # Dashboard & System
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["首页驾驶舱"])
 api_router.include_router(system.router, prefix="/system", tags=["系统管理"])
+
+# Metrics & Governance
+api_router.include_router(cube.router, prefix="/cube", tags=["指标中心"])
+api_router.include_router(openmetadata.router, prefix="/openmetadata", tags=["数据治理"])

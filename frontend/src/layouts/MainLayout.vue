@@ -44,6 +44,14 @@
           <el-icon><FolderOpened /></el-icon>
           <span>库表浏览</span>
         </el-menu-item>
+        <el-menu-item index="/metrics">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>指标中心</span>
+        </el-menu-item>
+        <el-menu-item index="/assets/catalog">
+          <el-icon><Collection /></el-icon>
+          <span>数据目录</span>
+        </el-menu-item>
         <el-menu-item index="/schedule/monitor">
           <el-icon><Timer /></el-icon>
           <span>任务监控</span>

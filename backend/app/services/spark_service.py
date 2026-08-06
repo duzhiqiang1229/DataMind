@@ -175,12 +175,12 @@ async def list_instances(
     db: AsyncSession, task_id: uuid.UUID, page: int, page_size: int
 ) -> tuple[list[dict], int]:
     count_q = select(func.count(TaskInstance.id)).where(
-        TaskInstance.task_id == task_id and TaskInstance.task_type == "spark"
+        TaskInstance.task_id == task_id, TaskInstance.task_type == "spark"
     )
     total = (await db.execute(count_q)).scalar_one()
     result = await db.execute(
         select(TaskInstance)
-        .where(TaskInstance.task_id == task_id)
+        .where(TaskInstance.task_id == task_id, TaskInstance.task_type == "spark")
         .order_by(TaskInstance.created_at.desc())
         .offset((page - 1) * page_size).limit(page_size)
     )

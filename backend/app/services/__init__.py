@@ -13,4 +13,6 @@ from app.services import (
     publish_service,
     dashboard_service,
     system_service,
+    cube_service,
+    openmetadata_service,
 )

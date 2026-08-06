@@ -63,6 +63,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "库表浏览", icon: "FolderOpened" },
       },
       {
+        path: "metrics",
+        name: "MetricsCenter",
+        component: () => import("@/views/metrics/index.vue"),
+        meta: { title: "指标中心", icon: "DataAnalysis" },
+      },
+      {
+        path: "assets/catalog",
+        name: "DataCatalog",
+        component: () => import("@/views/assets/catalog/index.vue"),
+        meta: { title: "数据目录", icon: "Collection" },
+      },
+      {
         path: "system/user",
         name: "UserManagement",
         component: () => import("@/views/system/user/index.vue"),
