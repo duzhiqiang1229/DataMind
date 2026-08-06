@@ -117,6 +117,7 @@
 import { ref, reactive, onMounted } from "vue";
 import { Plus } from "@element-plus/icons-vue";
 import { ElMessage, type FormInstance } from "element-plus";
+import { userApi } from "@/api";
 
 interface UserForm {
   username: string;
@@ -161,16 +162,12 @@ const formRules = {
 async function loadData() {
   loading.value = true;
   try {
-    const params: any = {
+    const res = await userApi.list({
       page: pagination.page,
       page_size: pagination.page_size,
-    };
-    if (searchKeyword.value) params.keyword = searchKeyword.value;
-    if (searchStatus.value) params.status = searchStatus.value;
-
-    // Use the user list API - need to import systemApi or create a user API
-    const { default: request } = await import("@/api/request");
-    const res = await request.get("/users", { params });
+      keyword: searchKeyword.value || undefined,
+      status: searchStatus.value || undefined,
+    });
     tableData.value = res.items || [];
     pagination.total = res.total || 0;
   } catch {
@@ -206,18 +203,17 @@ async function handleSubmit() {
     if (!valid) return;
     submitting.value = true;
     try {
-      const { default: request } = await import("@/api/request");
       if (isEdit.value) {
-        const payload: Record<string, any> = {
+        const payload = {
           full_name: form.full_name,
           email: form.email,
           phone: form.phone,
           department: form.department,
         };
-        await request.put(`/users/${editId.value}`, payload);
+        await userApi.update(editId.value, payload);
         ElMessage.success("更新成功");
       } else {
-        await request.post("/users", form);
+        await userApi.create(form);
         ElMessage.success("创建成功");
       }
       dialogVisible.value = false;
@@ -243,10 +239,7 @@ async function handleResetSubmit() {
     return;
   }
   try {
-    const { default: request } = await import("@/api/request");
-    await request.post(`/users/${resetForm.user_id}/reset-password`, {
-      new_password: resetForm.new_password,
-    });
+    await userApi.resetPassword(resetForm.user_id, resetForm.new_password);
     ElMessage.success("密码重置成功");
     resetDialogVisible.value = false;
   } catch {
@@ -256,8 +249,7 @@ async function handleResetSubmit() {
 
 async function handleToggleStatus(row: any) {
   try {
-    const { default: request } = await import("@/api/request");
-    await request.post(`/users/${row.id}/toggle-status`);
+    await userApi.toggleStatus(row.id);
     ElMessage.success(row.status === 'active' ? '已禁用' : '已启用');
     loadData();
   } catch {

@@ -214,6 +214,60 @@ export const componentApi = {
 };
 
 // ============================================================
+// Role API
+// ============================================================
+export const roleApi = {
+  list() {
+    return request.get("/roles");
+  },
+  create(data: any) {
+    return request.post("/roles", data);
+  },
+  update(id: string, data: any) {
+    return request.put(`/roles/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/roles/${id}`);
+  },
+  assignPermissions(id: string, permission_ids: string[]) {
+    return request.put(`/roles/${id}/permissions`, { permission_ids });
+  },
+  assignMenus(id: string, menu_ids: string[]) {
+    return request.put(`/roles/${id}/menus`, { menu_ids });
+  },
+  listPermissions() {
+    return request.get("/roles/permissions");
+  },
+};
+
+// ============================================================
+// User API
+// ============================================================
+export const userApi = {
+  list(params: { page: number; page_size: number; keyword?: string; status?: string }) {
+    return request.get("/users", { params });
+  },
+  create(data: any) {
+    return request.post("/users", data);
+  },
+  detail(id: string) {
+    return request.get(`/users/${id}`);
+  },
+  update(id: string, data: any) {
+    return request.put(`/users/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/users/${id}`);
+  },
+  resetPassword(id: string, new_password: string) {
+    return request.post(`/users/${id}/reset-password`, { new_password });
+  },
+  toggleStatus(id: string) {
+    return request.post(`/users/${id}/toggle-status`);
+  },
+};
+
+// ============================================================
 // Dashboard API
 // ============================================================
 export const dashboardApi = {

@@ -40,12 +40,20 @@
           <el-icon><Promotion /></el-icon>
           <span>发布管理</span>
         </el-menu-item>
+        <el-menu-item index="/schedule/monitor">
+          <el-icon><Timer /></el-icon>
+          <span>任务监控</span>
+        </el-menu-item>
         <el-sub-menu index="/system">
           <template #title>
             <el-icon><Setting /></el-icon>
             <span>系统管理</span>
           </template>
           <el-menu-item index="/system/user">用户管理</el-menu-item>
+          <el-menu-item index="/system/role">角色管理</el-menu-item>
+          <el-menu-item index="/system/component">组件配置</el-menu-item>
+          <el-menu-item index="/system/config">系统配置</el-menu-item>
+          <el-menu-item index="/system/log">操作日志</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>

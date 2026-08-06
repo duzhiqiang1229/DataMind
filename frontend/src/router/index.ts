@@ -62,6 +62,36 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@/views/system/user/index.vue"),
         meta: { title: "用户管理", icon: "User" },
       },
+      {
+        path: "system/role",
+        name: "RoleManagement",
+        component: () => import("@/views/system/role/index.vue"),
+        meta: { title: "角色管理", icon: "UserFilled" },
+      },
+      {
+        path: "system/component",
+        name: "ComponentConfig",
+        component: () => import("@/views/system/component/index.vue"),
+        meta: { title: "组件配置", icon: "Connection" },
+      },
+      {
+        path: "system/config",
+        name: "SystemConfig",
+        component: () => import("@/views/system/config/index.vue"),
+        meta: { title: "系统配置", icon: "Tools" },
+      },
+      {
+        path: "system/log",
+        name: "OperationLog",
+        component: () => import("@/views/system/log/index.vue"),
+        meta: { title: "操作日志", icon: "Document" },
+      },
+      {
+        path: "schedule/monitor",
+        name: "TaskMonitor",
+        component: () => import("@/views/schedule/monitor/index.vue"),
+        meta: { title: "任务监控", icon: "Timer" },
+      },
     ],
   },
   {
