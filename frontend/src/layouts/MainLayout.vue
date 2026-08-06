@@ -3,7 +3,9 @@
     <!-- Sidebar -->
     <el-aside :width="isCollapse ? '64px' : '220px'" class="sidebar">
       <div class="logo">
-        <el-icon size="28"><DataLine /></el-icon>
+        <div class="logo-icon">
+          <el-icon size="22"><DataLine /></el-icon>
+        </div>
         <span v-show="!isCollapse" class="logo-text">DataMind</span>
       </div>
       <el-scrollbar class="sidebar-scroll">
@@ -108,14 +110,12 @@
             <Fold v-if="!isCollapse" />
             <Expand v-else />
           </el-icon>
-          <!-- 面包屑 -->
           <el-breadcrumb separator="/" class="breadcrumb">
             <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
             <el-breadcrumb-item v-if="route.meta.title">{{ route.meta.title }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
         <div class="header-right">
-          <!-- 搜索 -->
           <el-input
             v-model="searchKeyword"
             placeholder="搜索功能..."
@@ -124,13 +124,11 @@
             class="header-search"
             @keyup.enter="handleSearch"
           />
-          <!-- 组件状态指示 -->
           <el-tooltip content="组件连接状态" placement="bottom">
             <el-badge :value="componentIssues" :hidden="componentIssues === 0" type="danger">
               <el-icon class="header-icon" @click="router.push('/system/component')"><Connection /></el-icon>
             </el-badge>
           </el-tooltip>
-          <!-- 用户下拉 -->
           <el-dropdown>
             <span class="user-info">
               <el-avatar :size="32" :src="authStore.userInfo?.avatar || undefined">
@@ -192,11 +190,12 @@ function handleSearch() {
     "数据源": "/datasource", "datax": "/datax", "同步": "/datax",
     "spark": "/spark", "sql": "/query", "查询": "/query", "工作台": "/query",
     "模型": "/data-model", "发布": "/publish", "仓库": "/warehouse/browse",
-    "库表": "/warehouse/browse", "监控": "/schedule/monitor", "调度": "/schedule/monitor",
-    "目录": "/assets/catalog", "血缘": "/assets/lineage", "指标": "/metrics",
-    "服务": "/data-service", "用户": "/system/user", "角色": "/system/role",
-    "权限": "/system/permission", "组件": "/system/component", "配置": "/system/config",
-    "日志": "/system/log", "首页": "/dashboard",
+    "库表": "/warehouse/browse", "监控": "/schedule/monitor", "调度": "/schedule/dag",
+    "dag": "/schedule/dag", "目录": "/assets/catalog", "血缘": "/assets/lineage",
+    "指标": "/metrics", "服务": "/data-service", "用户": "/system/user",
+    "角色": "/system/role", "权限": "/system/permission", "组件": "/system/component",
+    "配置": "/system/config", "日志": "/system/log", "首页": "/dashboard",
+    "存储": "/warehouse/storage",
   };
   for (const [key, path] of Object.entries(menuMap)) {
     if (key.toLowerCase().includes(keyword) || keyword.includes(key.toLowerCase())) {
@@ -224,24 +223,40 @@ onMounted(loadComponentStatus);
 }
 
 .sidebar {
-  background: #304156;
-  transition: width 0.3s;
+  background: #1e293b;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
 }
 
 .logo {
   height: 60px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #fff;
-  background: #2b3a4d;
+  gap: 10px;
+  padding: 0 16px;
+  background: rgba(0, 0, 0, 0.2);
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #4366e5, #6c8aff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(67, 102, 229, 0.4);
+  }
 
   .logo-text {
     font-size: 18px;
-    font-weight: bold;
+    font-weight: 700;
+    color: #fff;
     white-space: nowrap;
+    letter-spacing: 0.5px;
   }
 }
 
@@ -252,19 +267,34 @@ onMounted(loadComponentStatus);
 .sidebar-menu {
   border-right: none;
   background: transparent;
+  padding: 8px 0;
 
   :deep(.el-menu-item),
   :deep(.el-sub-menu__title) {
-    color: #bfcbd9;
+    color: #94a3b8;
+    height: 44px;
+    line-height: 44px;
+    margin: 2px 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
 
     &:hover {
-      background: #263445;
+      background: rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
     }
 
     &.is-active {
-      color: #409eff;
-      background: #1f2d3d;
+      background: linear-gradient(135deg, rgba(67, 102, 229, 0.3), rgba(67, 102, 229, 0.1));
+      color: #fff;
+      box-shadow: inset 3px 0 0 #4366e5;
     }
+  }
+
+  :deep(.el-sub-menu .el-menu-item) {
+    height: 40px;
+    line-height: 40px;
+    font-size: 13px;
+    min-width: auto;
   }
 }
 
@@ -273,9 +303,10 @@ onMounted(loadComponentStatus);
   align-items: center;
   justify-content: space-between;
   background: #fff;
-  border-bottom: 1px solid #e6e6e6;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
-  padding: 0 16px;
+  border-bottom: 1px solid #f0f0f0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  padding: 0 20px;
+  height: 56px;
 
   .header-left {
     display: flex;
@@ -283,12 +314,30 @@ onMounted(loadComponentStatus);
     gap: 16px;
 
     .collapse-btn {
-      font-size: 20px;
+      font-size: 18px;
       cursor: pointer;
+      color: #64748b;
+      transition: color 0.2s;
+
+      &:hover {
+        color: #4366e5;
+      }
     }
 
     .breadcrumb {
-      line-height: 60px;
+      line-height: 56px;
+
+      :deep(.el-breadcrumb__item) {
+        .el-breadcrumb__inner {
+          color: #94a3b8;
+          font-size: 13px;
+        }
+
+        &:last-child .el-breadcrumb__inner {
+          color: #1e293b;
+          font-weight: 600;
+        }
+      }
     }
   }
 
@@ -299,12 +348,32 @@ onMounted(loadComponentStatus);
 
     .header-search {
       width: 200px;
+
+      :deep(.el-input__wrapper) {
+        background: #f1f5f9;
+        box-shadow: none;
+        border-radius: 20px;
+
+        &:hover {
+          background: #e2e8f0;
+        }
+
+        &.is-focus {
+          background: #fff;
+          box-shadow: 0 0 0 2px #4366e5;
+        }
+      }
     }
 
     .header-icon {
       font-size: 20px;
       cursor: pointer;
-      color: #606266;
+      color: #64748b;
+      transition: color 0.2s;
+
+      &:hover {
+        color: #4366e5;
+      }
     }
 
     .user-info {
@@ -312,17 +381,26 @@ onMounted(loadComponentStatus);
       align-items: center;
       gap: 8px;
       cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 8px;
+      transition: background 0.2s;
+
+      &:hover {
+        background: #f1f5f9;
+      }
 
       .username {
         font-size: 14px;
+        color: #1e293b;
+        font-weight: 500;
       }
     }
   }
 }
 
 .content {
-  background: #f0f2f5;
-  padding: 16px;
+  background: #f8fafc;
+  padding: 20px;
   overflow-y: auto;
 }
 </style>
