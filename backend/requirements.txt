@@ -1,0 +1,37 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Database
+sqlalchemy==2.0.36
+greenlet==3.1.1
+psycopg2-binary==2.9.10
+alembic==1.14.0
+asyncpg==0.30.0
+
+# Cache
+redis==5.2.1
+
+# Auth
+pyjwt==2.10.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+
+# Data validation
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# HTTP client (for component API calls)
+httpx==0.28.1
+
+# Doris MySQL protocol
+pymysql==1.1.1
+cryptography==44.0.0
+
+# Background tasks (Airflow status polling)
+apscheduler==3.11.0
+
+# Utils
+python-dotenv==1.0.1
+loguru==0.7.3

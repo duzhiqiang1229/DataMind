@@ -1,0 +1,74 @@
+services:
+  # ============================================================
+  # PostgreSQL - DataMind platform database
+  # ============================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: datamind-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: datamind
+      POSTGRES_PASSWORD: datamind
+      POSTGRES_DB: datamind
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../database/001_init_schema.sql:/docker-entrypoint-initdb.d/001_init_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datamind"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # Redis - cache + token blacklist
+  # ============================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: datamind-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # DataMind Backend - FastAPI
+  # ============================================================
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: datamind-backend
+    restart: unless-stopped
+    env_file:
+      - ../backend/.env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app
+      - ../airflow-dags:/opt/airflow/dags
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      python -m uvicorn app.main:app
+      --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
+  redis_data:
