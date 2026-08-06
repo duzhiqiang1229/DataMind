@@ -7,7 +7,10 @@ from app.services import (
     component_service,
     datasource_service,
     datax_task_service,
+    spark_service,
     doris_query_service,
+    data_model_service,
+    publish_service,
     dashboard_service,
     system_service,
 )

@@ -1,6 +1,7 @@
 import axios, { type AxiosRequestConfig } from "axios";
 import { ElMessage } from "element-plus";
 import NProgress from "nprogress";
+import { getToken, clearToken } from "./token";
 
 const instance = axios.create({
   baseURL: "/api/v1",
@@ -8,21 +9,13 @@ const instance = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Request interceptor: attach JWT token
+// Request interceptor: attach JWT token from module-level holder
 instance.interceptors.request.use(
   (config) => {
     NProgress.start();
-    // Pinia persisted state stores under store id "auth" as JSON
-    const raw = localStorage.getItem("auth");
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed.token) {
-          config.headers.Authorization = `Bearer ${parsed.token}`;
-        }
-      } catch {
-        // ignore parse errors
-      }
+    const token = getToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -60,7 +53,7 @@ instance.interceptors.response.use(
 
       if (status === 401) {
         ElMessage.error("登录已过期，请重新登录");
-        // Clear Pinia persisted auth state
+        clearToken();
         localStorage.removeItem("auth");
         window.location.href = "/login";
       } else if (status === 403) {

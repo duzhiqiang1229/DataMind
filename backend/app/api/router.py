@@ -9,7 +9,10 @@ from app.api.v1 import (
     components,
     datasources,
     datax_tasks,
+    spark_tasks,
     doris_query,
+    data_models,
+    publish,
     dashboard,
     system,
 )
@@ -30,7 +33,12 @@ api_router.include_router(datasources.router, prefix="/datasources", tags=["数�
 
 # Data Integration
 api_router.include_router(datax_tasks.router, prefix="/datax-tasks", tags=["DataX同步"])
+api_router.include_router(spark_tasks.router, prefix="/spark-tasks", tags=["Spark任务"])
 api_router.include_router(doris_query.router, prefix="/doris-query", tags=["数据查询"])
+
+# Data Development
+api_router.include_router(data_models.router, prefix="/data-models", tags=["数据模型"])
+api_router.include_router(publish.router, prefix="/publish", tags=["发布管理"])
 
 # Dashboard & System
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["首页驾驶舱"])

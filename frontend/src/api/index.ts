@@ -85,6 +85,84 @@ export const dataxApi = {
 };
 
 // ============================================================
+// Spark Task API
+// ============================================================
+export const sparkApi = {
+  list(params: { page: number; page_size: number; status?: string }) {
+    return request.get("/spark-tasks", { params });
+  },
+  create(data: any) {
+    return request.post("/spark-tasks", data);
+  },
+  detail(id: string) {
+    return request.get(`/spark-tasks/${id}`);
+  },
+  update(id: string, data: any) {
+    return request.put(`/spark-tasks/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/spark-tasks/${id}`);
+  },
+  trigger(id: string) {
+    return request.post(`/spark-tasks/${id}/trigger`, { run_immediately: true });
+  },
+  instances(id: string, params: { page: number; page_size: number }) {
+    return request.get(`/spark-tasks/${id}/instances`, { params });
+  },
+  instanceStatus(instanceId: string) {
+    return request.get(`/spark-tasks/instances/${instanceId}/status`);
+  },
+  instanceLog(instanceId: string) {
+    return request.get(`/spark-tasks/instances/${instanceId}/log`);
+  },
+};
+
+// ============================================================
+// Data Model API
+// ============================================================
+export const dataModelApi = {
+  list(params: { page: number; page_size: number; layer?: string; status?: string }) {
+    return request.get("/data-models", { params });
+  },
+  create(data: any) {
+    return request.post("/data-models", data);
+  },
+  detail(id: string) {
+    return request.get(`/data-models/${id}`);
+  },
+  update(id: string, data: any) {
+    return request.put(`/data-models/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/data-models/${id}`);
+  },
+  versions(id: string) {
+    return request.get(`/data-models/${id}/versions`);
+  },
+};
+
+// ============================================================
+// Publish API
+// ============================================================
+export const publishApi = {
+  list(params: { page: number; page_size: number; publish_type?: string; status?: string }) {
+    return request.get("/publish", { params });
+  },
+  create(data: any) {
+    return request.post("/publish", data);
+  },
+  detail(id: string) {
+    return request.get(`/publish/${id}`);
+  },
+  execute(id: string) {
+    return request.post(`/publish/${id}/execute`);
+  },
+  delete(id: string) {
+    return request.delete(`/publish/${id}`);
+  },
+};
+
+// ============================================================
 // Doris Query API
 // ============================================================
 export const queryApi = {

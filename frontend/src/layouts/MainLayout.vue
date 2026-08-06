@@ -24,9 +24,21 @@
           <el-icon><Sort /></el-icon>
           <span>DataX 同步</span>
         </el-menu-item>
+        <el-menu-item index="/spark">
+          <el-icon><Cpu /></el-icon>
+          <span>Spark 任务</span>
+        </el-menu-item>
         <el-menu-item index="/query">
           <el-icon><Monitor /></el-icon>
           <span>SQL 工作台</span>
+        </el-menu-item>
+        <el-menu-item index="/data-model">
+          <el-icon><Files /></el-icon>
+          <span>数据模型</span>
+        </el-menu-item>
+        <el-menu-item index="/publish">
+          <el-icon><Promotion /></el-icon>
+          <span>发布管理</span>
         </el-menu-item>
         <el-sub-menu index="/system">
           <template #title>

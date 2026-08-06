@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
+import { setToken, getToken } from "@/api/token";
 
 const routes: RouteRecordRaw[] = [
   {
@@ -32,10 +33,28 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "DataX 同步", icon: "Sort" },
       },
       {
+        path: "spark",
+        name: "SparkTasks",
+        component: () => import("@/views/spark/index.vue"),
+        meta: { title: "Spark 任务", icon: "Cpu" },
+      },
+      {
         path: "query",
         name: "QueryWorkbench",
         component: () => import("@/views/query/index.vue"),
         meta: { title: "SQL 工作台", icon: "Monitor" },
+      },
+      {
+        path: "data-model",
+        name: "DataModels",
+        component: () => import("@/views/data-model/index.vue"),
+        meta: { title: "数据模型", icon: "Files" },
+      },
+      {
+        path: "publish",
+        name: "Publish",
+        component: () => import("@/views/publish/index.vue"),
+        meta: { title: "发布管理", icon: "Promotion" },
       },
       {
         path: "system/user",
@@ -72,6 +91,12 @@ router.beforeEach(async (to, _from, next) => {
   if (!authStore.token) {
     next({ path: "/login", query: { redirect: to.fullPath } });
     return;
+  }
+
+  // Sync module-level token (handles page refresh where Pinia restored from localStorage
+  // but the in-memory token holder was reset)
+  if (!getToken() && authStore.token) {
+    setToken(authStore.token);
   }
 
   // Load user info if not loaded

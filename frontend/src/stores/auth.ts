@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import { authApi } from "@/api";
+import { setToken, clearToken } from "@/api/token";
 
 export interface UserInfo {
   id: string;
@@ -46,6 +47,8 @@ export const useAuthStore = defineStore("auth", () => {
     const res = await authApi.login(username, password);
     token.value = res.access_token;
     refreshToken.value = res.refresh_token;
+    // Set module-level token immediately (Pinia persist is async via watch)
+    setToken(res.access_token);
   }
 
   async function fetchCurrentUser() {
@@ -56,6 +59,7 @@ export const useAuthStore = defineStore("auth", () => {
     token.value = "";
     refreshToken.value = "";
     userInfo.value = null;
+    clearToken();
   }
 
   return {
