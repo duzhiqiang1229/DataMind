@@ -296,6 +296,12 @@ onMounted(loadComponentStatus);
     font-size: 13px;
     min-width: auto;
   }
+
+  :deep(.el-sub-menu .el-menu) {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+    margin: 2px 0;
+  }
 }
 
 .header {
