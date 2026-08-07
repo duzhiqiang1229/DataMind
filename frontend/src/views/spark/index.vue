@@ -9,7 +9,7 @@
       </template>
 
       <el-table :data="tableData" v-loading="loading" border>
-        <el-table-column prop="task_name" label="任务名称" />
+        <el-table-column prop="task_name" label="任务名称" min-width="180" show-overflow-tooltip />
         <el-table-column prop="task_code" label="编码" width="150" />
         <el-table-column prop="mode" label="模式" width="80">
           <template #default="{ row }">

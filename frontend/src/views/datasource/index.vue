@@ -22,10 +22,10 @@
       </el-form>
 
       <el-table :data="tableData" v-loading="loading" border>
-        <el-table-column prop="source_name" label="名称" />
+        <el-table-column prop="source_name" label="名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="source_type" label="类型" width="100" />
-        <el-table-column prop="host" label="地址" />
-        <el-table-column prop="database_name" label="数据库" width="120" />
+        <el-table-column prop="host" label="地址" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="database_name" label="数据库" min-width="120" show-overflow-tooltip />
         <el-table-column label="连接状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.last_connection_ok ? 'success' : 'danger'" size="small">

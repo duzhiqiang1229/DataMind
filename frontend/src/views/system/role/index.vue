@@ -8,9 +8,9 @@
     </template>
 
     <el-table :data="tableData" v-loading="loading" border>
-      <el-table-column prop="role_name" label="角色名称" />
+      <el-table-column prop="role_name" label="角色名称" min-width="120" />
       <el-table-column prop="role_code" label="编码" width="150" />
-      <el-table-column prop="description" label="描述" show-overflow-tooltip />
+      <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
       <el-table-column label="状态" width="80">
         <template #default="{ row }">
           <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">

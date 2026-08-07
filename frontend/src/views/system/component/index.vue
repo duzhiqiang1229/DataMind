@@ -8,10 +8,10 @@
     </template>
 
     <el-table :data="tableData" v-loading="loading" border>
-      <el-table-column prop="component_name" label="名称" />
+      <el-table-column prop="component_name" label="名称" min-width="120" show-overflow-tooltip />
       <el-table-column prop="component_code" label="标识" width="120" />
       <el-table-column prop="component_type" label="类型" width="120" />
-      <el-table-column prop="base_url" label="地址" show-overflow-tooltip />
+      <el-table-column prop="base_url" label="地址" min-width="200" show-overflow-tooltip />
       <el-table-column label="健康状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.last_check_ok ? 'success' : 'danger'" size="small">

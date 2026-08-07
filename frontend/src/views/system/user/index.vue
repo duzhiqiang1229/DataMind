@@ -25,7 +25,7 @@
     <el-table :data="tableData" v-loading="loading" border>
       <el-table-column prop="username" label="用户名" width="120" />
       <el-table-column prop="full_name" label="姓名" width="100" />
-      <el-table-column prop="email" label="邮箱" />
+      <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
       <el-table-column prop="department" label="部门" width="120" />
       <el-table-column label="角色" width="150">
         <template #default="{ row }">

@@ -21,7 +21,7 @@
       <el-table-column prop="username" label="用户" width="100" />
       <el-table-column prop="module" label="模块" width="100" />
       <el-table-column prop="action" label="操作" width="100" />
-      <el-table-column prop="description" label="描述" show-overflow-tooltip />
+      <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
       <el-table-column prop="request_method" label="方法" width="80" />
       <el-table-column prop="status_code" label="状态码" width="80" />
       <el-table-column prop="ip_address" label="IP" width="120" />

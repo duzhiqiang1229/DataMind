@@ -115,7 +115,7 @@
                   <el-tag size="small" :type="resultTag(row.result)">{{ row.result || "-" }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="error_message" label="错误信息" show-overflow-tooltip />
+              <el-table-column prop="error_message" label="错误信息" min-width="200" show-overflow-tooltip />
             </el-table>
           </template>
 

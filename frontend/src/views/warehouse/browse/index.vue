@@ -38,7 +38,7 @@
             <el-table :data="columns" border size="small">
               <el-table-column prop="name" label="列名" width="180" />
               <el-table-column prop="type" label="类型" width="150" />
-              <el-table-column prop="comment" label="注释" show-overflow-tooltip />
+              <el-table-column prop="comment" label="注释" min-width="200" show-overflow-tooltip />
               <el-table-column label="操作" width="100">
                 <template #default="{ row }">
                   <el-button text type="primary" size="small" @click="previewData(row)">预览</el-button>

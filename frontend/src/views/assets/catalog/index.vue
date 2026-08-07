@@ -16,9 +16,9 @@
         <el-col :span="24">
           <h4>搜索结果</h4>
           <el-table :data="searchResults" border size="small" style="margin-bottom: 16px;">
-            <el-table-column prop="name" label="名称" />
-            <el-table-column prop="fullyQualifiedName" label="全限定名" show-overflow-tooltip />
-            <el-table-column prop="description" label="描述" show-overflow-tooltip />
+            <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="fullyQualifiedName" label="全限定名" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
                 <el-button text type="primary" size="small" @click="viewLineage(row)">血缘</el-button>
@@ -45,7 +45,7 @@
             <template #header>表 ({{ tables.length }})</template>
             <el-table :data="tables" v-loading="tableLoading" border size="small">
               <el-table-column prop="name" label="表名" width="180" />
-              <el-table-column prop="description" label="描述" show-overflow-tooltip />
+              <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
               <el-table-column label="列数" width="80">
                 <template #default="{ row }">{{ row.columns?.length || 0 }}</template>
               </el-table-column>
