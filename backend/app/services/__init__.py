@@ -17,4 +17,7 @@ from app.services import (
     openmetadata_service,
     airflow_service,
     data_service,
+    metric_category_service,
+    table_owner_service,
+    datasource_permission_service,
 )

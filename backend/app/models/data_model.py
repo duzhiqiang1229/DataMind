@@ -19,6 +19,9 @@ class DataModel(Base):
     database: Mapped[str] = mapped_column(String(50), nullable=False)
     table_name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    etl_sql: Mapped[str | None] = mapped_column(Text)
+    business_domain: Mapped[str | None] = mapped_column(String(50), index=True)
+    data_domain: Mapped[str | None] = mapped_column(String(50), index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", index=True)
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -34,6 +37,31 @@ class DataModel(Base):
         back_populates="model", cascade="all, delete-orphan", lazy="selectin",
         order_by="DataModelVersion.version.desc()"
     )
+
+
+class BusinessDomain(Base):
+    """业务过程定义（原业务域）。"""
+    __tablename__ = "business_domains"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    domain_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    domain_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    data_domain: Mapped[str | None] = mapped_column(String(50))
+    description: Mapped[str | None] = mapped_column(String(200))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class DataDomain(Base):
+    """数据域定义。"""
+    __tablename__ = "data_domains"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    domain_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    domain_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(String(200))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class DataModelField(Base):

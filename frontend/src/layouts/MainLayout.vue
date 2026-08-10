@@ -28,7 +28,17 @@
               <span>数据管理</span>
             </template>
             <el-menu-item index="/datasource">数据源管理</el-menu-item>
-            <el-menu-item index="/datax">DataX 同步</el-menu-item>
+          </el-sub-menu>
+
+          <!-- 数据建模 -->
+          <el-sub-menu index="/data-modeling">
+            <template #title>
+              <el-icon><Files /></el-icon>
+              <span>数据建模</span>
+            </template>
+            <el-menu-item index="/data-modeling/domain">数据域</el-menu-item>
+            <el-menu-item index="/data-modeling/process">业务过程</el-menu-item>
+            <el-menu-item index="/data-modeling/model">模型设计</el-menu-item>
           </el-sub-menu>
 
           <!-- 数据开发 -->
@@ -37,20 +47,8 @@
               <el-icon><EditPen /></el-icon>
               <span>数据开发</span>
             </template>
-            <el-menu-item index="/spark">Spark 任务</el-menu-item>
-            <el-menu-item index="/query">SQL 工作台</el-menu-item>
-            <el-menu-item index="/data-model">数据模型</el-menu-item>
-            <el-menu-item index="/publish">发布管理</el-menu-item>
-          </el-sub-menu>
-
-          <!-- 数据仓库 -->
-          <el-sub-menu index="/warehouse">
-            <template #title>
-              <el-icon><Files /></el-icon>
-              <span>数据仓库</span>
-            </template>
-            <el-menu-item index="/warehouse/browse">库表浏览</el-menu-item>
-            <el-menu-item index="/warehouse/storage">存储监控</el-menu-item>
+            <el-menu-item index="/datax">数据集成</el-menu-item>
+            <el-menu-item index="/query">ETL 开发</el-menu-item>
           </el-sub-menu>
 
           <!-- 调度中心 -->
@@ -60,7 +58,7 @@
               <span>调度中心</span>
             </template>
             <el-menu-item index="/schedule/monitor">任务监控</el-menu-item>
-            <el-menu-item index="/schedule/dag">DAG 管理</el-menu-item>
+            <el-menu-item index="/schedule/task">调度任务</el-menu-item>
           </el-sub-menu>
 
           <!-- 数据资产 -->
@@ -71,13 +69,19 @@
             </template>
             <el-menu-item index="/assets/catalog">数据目录</el-menu-item>
             <el-menu-item index="/assets/lineage">血缘关系</el-menu-item>
+            <el-menu-item index="/assets/steward">数据责任人</el-menu-item>
           </el-sub-menu>
 
           <!-- 指标中心 -->
-          <el-menu-item index="/metrics">
-            <el-icon><DataAnalysis /></el-icon>
-            <span>指标中心</span>
-          </el-menu-item>
+          <el-sub-menu index="/metrics">
+            <template #title>
+              <el-icon><DataAnalysis /></el-icon>
+              <span>指标中心</span>
+            </template>
+            <el-menu-item index="/metrics/modeling">Cube 建模</el-menu-item>
+            <el-menu-item index="/metrics/definitions">指标定义</el-menu-item>
+            <el-menu-item index="/metrics/query">指标查询</el-menu-item>
+          </el-sub-menu>
 
           <!-- 数据服务 -->
           <el-menu-item index="/data-service">
@@ -93,10 +97,7 @@
             </template>
             <el-menu-item index="/system/user">用户管理</el-menu-item>
             <el-menu-item index="/system/role">角色管理</el-menu-item>
-            <el-menu-item index="/system/permission">权限管理</el-menu-item>
             <el-menu-item index="/system/component">组件配置</el-menu-item>
-            <el-menu-item index="/system/config">系统配置</el-menu-item>
-            <el-menu-item index="/system/log">操作日志</el-menu-item>
           </el-sub-menu>
         </el-menu>
       </el-scrollbar>
@@ -188,14 +189,11 @@ function handleSearch() {
   if (!keyword) return;
   const menuMap: Record<string, string> = {
     "数据源": "/datasource", "datax": "/datax", "同步": "/datax",
-    "spark": "/spark", "sql": "/query", "查询": "/query", "工作台": "/query",
-    "模型": "/data-model", "发布": "/publish", "仓库": "/warehouse/browse",
-    "库表": "/warehouse/browse", "监控": "/schedule/monitor", "调度": "/schedule/dag",
-    "dag": "/schedule/dag", "目录": "/assets/catalog", "血缘": "/assets/lineage",
-    "指标": "/metrics", "服务": "/data-service", "用户": "/system/user",
-    "角色": "/system/role", "权限": "/system/permission", "组件": "/system/component",
-    "配置": "/system/config", "日志": "/system/log", "首页": "/dashboard",
-    "存储": "/warehouse/storage",
+    "sql": "/query", "查询": "/query", "工作台": "/query",
+    "模型": "/data-modeling/model", "发布": "/publish", "监控": "/schedule/monitor", "调度": "/schedule/monitor",
+    "目录": "/assets/catalog", "血缘": "/assets/lineage",
+    "指标": "/metrics/definitions", "服务": "/data-service", "用户": "/system/user",
+    "角色": "/system/role", "组件": "/system/component", "首页": "/dashboard",
   };
   for (const [key, path] of Object.entries(menuMap)) {
     if (key.toLowerCase().includes(keyword) || keyword.includes(key.toLowerCase())) {

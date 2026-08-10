@@ -15,11 +15,19 @@ class DorisClient(ComponentAdapter):
 
     def __init__(self, config: dict):
         super().__init__("doris", config)
-        # MySQL protocol host/port (usually 9030)
-        self.mysql_host: str = config.get("mysql_host", config.get("host", ""))
-        self.mysql_port: int = config.get("mysql_port", 9030)
+        # MySQL protocol host/port (usually 9030).
+        # Accept both the legacy key names (mysql_host/mysql_port/http_port)
+        # and the frontend form key names (fe_host/fe_query_port/fe_http_port).
+        self.mysql_host: str = (
+            config.get("mysql_host") or config.get("fe_host") or config.get("host") or ""
+        )
+        self.mysql_port: int = int(
+            config.get("mysql_port") or config.get("fe_query_port") or 9030
+        )
         # HTTP API host/port (usually 8030)
-        self.http_port: int = config.get("http_port", 8030)
+        self.http_port: int = int(
+            config.get("http_port") or config.get("fe_http_port") or 8030
+        )
         self.username: str = self._credentials.get("username", "root")
         self.password: str = self._credentials.get("password", "")
         self.database: str = config.get("default_database", "")
@@ -128,12 +136,30 @@ class DorisClient(ComponentAdapter):
             conn.close()
 
     async def get_table_schema(self, database: str, table_name: str) -> list[dict]:
-        """Get column definitions of a table."""
+        """Get column definitions of a table.
+
+        Uses SHOW FULL COLUMNS (includes comments) and normalizes the
+        MySQL-style keys to lowercase so API response models and the
+        frontend receive consistent field names.
+        """
         conn = self._get_mysql_conn(database)
         try:
             with conn.cursor() as cursor:
-                cursor.execute(f"DESC {database}.{table_name}")
-                return cursor.fetchall()
+                cursor.execute(f"SHOW FULL COLUMNS FROM {database}.{table_name}")
+                rows = cursor.fetchall()
+            return [
+                {
+                    "field": r.get("Field", ""),
+                    "name": r.get("Field", ""),
+                    "type": r.get("Type", ""),
+                    "null": r.get("Null"),
+                    "key": r.get("Key"),
+                    "default": r.get("Default"),
+                    "extra": r.get("Extra"),
+                    "comment": r.get("Comment", ""),
+                }
+                for r in rows
+            ]
         finally:
             conn.close()
 

@@ -8,7 +8,7 @@ import re
 class DataSourceBase(BaseModel):
     """数据源基础字段。"""
     source_name: str = Field(..., max_length=100, description="数据源名称")
-    source_type: str = Field(..., description="类型: mysql/oracle/postgresql/sqlserver")
+    source_type: str = Field(..., description="类型: mysql/doris/oracle/postgresql/sqlserver")
     host: str = Field(..., description="主机地址")
     port: int = Field(..., ge=1, le=65535, description="端口")
     database_name: Optional[str] = Field(None, description="数据库名")
@@ -20,7 +20,7 @@ class DataSourceBase(BaseModel):
     @field_validator("source_type")
     @classmethod
     def validate_source_type(cls, v):
-        allowed = {"mysql", "oracle", "postgresql", "sqlserver"}
+        allowed = {"mysql", "doris", "oracle", "postgresql", "sqlserver"}
         if v not in allowed:
             raise ValueError(f"source_type must be one of {allowed}")
         return v

@@ -23,7 +23,7 @@ class FieldMappingItem(BaseModel):
 class DataXTaskCreate(BaseModel):
     """创建 DataX 同步任务。"""
     task_name: str = Field(..., max_length=200, description="任务名称")
-    task_code: str = Field(..., max_length=100, description="任务编码(唯一)")
+    task_code: Optional[str] = Field(None, max_length=100, description="任务编码(留空自动生成)")
 
     # 源端
     source_datasource_id: str = Field(..., description="源数据源ID")

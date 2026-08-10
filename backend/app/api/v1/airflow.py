@@ -1,11 +1,13 @@
 """Airflow DAG management API: list, trigger, pause/resume, runs, logs, retry."""
-from fastapi import APIRouter, Depends, Query
+from typing import Optional
+
+from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
-from app.schemas.common import ResponseOK
+from app.core.dependencies import get_current_user, PaginationParams
+from app.schemas.common import ResponseOK, PageResponse, PageResult
 from app.services import airflow_service
 
 router = APIRouter()
@@ -22,6 +24,77 @@ class TriggerDagBody(BaseModel):
 class RetryDagRunBody(BaseModel):
     """Request body for retrying a failed task instance."""
     task_id: str
+
+
+class CreateDagBody(BaseModel):
+    """Request body for creating a scheduled DAG task."""
+    dag_name: str
+    task_type: str  # datax / spark
+    task_id: str
+    schedule: str
+    description: Optional[str] = None
+
+
+class CreateDagFileBody(BaseModel):
+    """Request body for creating a scheduling script (.py DAG file)."""
+    script_name: str
+    content: str
+
+
+class UpdateDagFileBody(BaseModel):
+    """Request body for saving a DAG file's content."""
+    content: str
+
+
+@router.post("/deploy-dags", response_model=ResponseOK[dict], summary="部署 DAG 模板")
+async def deploy_dags(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    try:
+        result = await airflow_service.deploy_dags(db)
+    except ValueError as e:
+        return ResponseOK(code=400, message=str(e))
+    return ResponseOK(data=result)
+
+
+@router.post("/create-dag", response_model=ResponseOK[dict], summary="创建 DAG 任务")
+async def create_dag(
+    body: CreateDagBody,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    try:
+        result = await airflow_service.create_dag_task(
+            db, body.dag_name, body.task_type, body.task_id,
+            body.schedule, body.description,
+        )
+    except ValueError as e:
+        return ResponseOK(code=400, message=str(e))
+    return ResponseOK(data=result)
+
+
+@router.get("/dag-runs", response_model=PageResponse[dict], summary="DAG 运行记录(同步)")
+async def dag_runs(
+    pagination: PaginationParams = Depends(),
+    dag_id: str | None = None,
+    status: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    items, total = await airflow_service.list_dag_runs_page(
+        db, pagination.page, pagination.page_size, dag_id, status
+    )
+    return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
+
+
+@router.post("/sync-runs", response_model=ResponseOK[dict], summary="手动同步 DAG 运行记录")
+async def sync_runs(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    result = await airflow_service.sync_dag_runs(db)
+    return ResponseOK(data=result)
 
 
 # --- Endpoints ---
@@ -162,3 +235,64 @@ async def retry_dag_run(
     result = await airflow_service.retry_dag_run(db, dag_id, run_id, body.task_id)
     code = 200 if result.get("success") else 500
     return ResponseOK(code=code, message=result.get("message", ""), data=result)
+
+
+@router.put("/{dag_id}/schedule", response_model=ResponseOK[dict], summary="更新调度配置")
+async def update_schedule(
+    dag_id: str,
+    schedule: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    result = await airflow_service.update_dag_schedule(db, dag_id, schedule.get("schedule_interval", ""))
+    if not result:
+        return ResponseOK(code=503, message="Airflow not configured or update failed")
+    return ResponseOK(data=result)
+
+
+@router.post("/dag-files", response_model=ResponseOK[dict], summary="新增调度脚本(.py DAG文件)")
+async def create_dag_file(
+    body: CreateDagFileBody,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Write a new scheduling script (.py) into the Airflow dags folder.
+
+    The script is a self-contained Airflow DAG file; the scheduler parses it
+    automatically, so DAG name / schedule / status come from the script.
+    """
+    try:
+        result = await airflow_service.create_dag_file(db, body.script_name, body.content)
+    except ValueError as e:
+        return ResponseOK(code=400, message=str(e))
+    except RuntimeError as e:
+        return ResponseOK(code=503, message=str(e))
+    return ResponseOK(data=result)
+
+
+@router.get("/{dag_id}/file", response_model=ResponseOK[dict], summary="读取DAG文件内容")
+async def get_dag_file(
+    dag_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    result = await airflow_service.get_dag_file(db, dag_id)
+    if result is None:
+        return ResponseOK(code=404, message="DAG 文件不存在或无法读取")
+    return ResponseOK(data=result)
+
+
+@router.put("/{dag_id}/file", response_model=ResponseOK[dict], summary="保存DAG文件内容")
+async def update_dag_file(
+    dag_id: str,
+    body: UpdateDagFileBody,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    try:
+        result = await airflow_service.update_dag_file(db, dag_id, body.content)
+    except ValueError as e:
+        return ResponseOK(code=400, message=str(e))
+    if result is None:
+        return ResponseOK(code=404, message="DAG 文件不存在或无法写入")
+    return ResponseOK(data=result)

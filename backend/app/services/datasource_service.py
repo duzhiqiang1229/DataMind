@@ -25,10 +25,19 @@ _DRIVER_MAP = {
 async def list_datasources(
     db: AsyncSession, page: int, page_size: int,
     source_type: Optional[str] = None, status: Optional[str] = None,
+    keyword: Optional[str] = None,
 ) -> tuple[list[dict], int]:
     query = select(DataSource)
     count_q = select(func.count(DataSource.id))
 
+    if keyword:
+        kw = f"%{keyword}%"
+        query = query.where(
+            DataSource.source_name.ilike(kw) | DataSource.host.ilike(kw)
+        )
+        count_q = count_q.where(
+            DataSource.source_name.ilike(kw) | DataSource.host.ilike(kw)
+        )
     if source_type:
         query = query.where(DataSource.source_type == source_type)
         count_q = count_q.where(DataSource.source_type == source_type)
@@ -125,7 +134,7 @@ async def test_connection(db: AsyncSession, ds_id: uuid.UUID) -> ConnectionTestR
     now = datetime.now(timezone.utc)
 
     try:
-        if ds.source_type == "mysql":
+        if ds.source_type in ("mysql", "doris"):
             import pymysql
             conn = pymysql.connect(
                 host=ds.host, port=ds.port, user=ds.username,
@@ -169,6 +178,136 @@ async def test_connection(db: AsyncSession, ds_id: uuid.UUID) -> ConnectionTestR
         return ConnectionTestResponse(success=False, message=str(e), tested_at=now)
 
 
+async def execute_query(
+    db: AsyncSession, ds_id: uuid.UUID, sql: str, limit: int = 10000,
+    database: Optional[str] = None,
+) -> dict:
+    """Execute a read-only query against a configured data source.
+
+    Supports MySQL and PostgreSQL sources (same drivers as connection test).
+    Returns the same result shape as the Doris query service.
+    """
+    result = await db.execute(select(DataSource).where(DataSource.id == ds_id))
+    ds = result.scalar_one_or_none()
+    if not ds:
+        raise ValueError("Data source not found")
+    if ds.status != "active":
+        raise ValueError("Data source is not active")
+
+    sql_stripped = sql.strip()
+    head = sql_stripped.upper()[:16]
+    if not (
+        head.startswith("SELECT")
+        or head.startswith("SHOW")
+        or head.startswith("DESC")
+        or head.startswith("WITH")
+    ):
+        raise ValueError("Only SELECT/SHOW/DESC/WITH queries are allowed")
+
+    password = decrypt_value(ds.password_encrypted)
+    target_db = database or ds.database_name or ""
+    import time
+    start = time.time()
+    rows = []
+
+    if ds.source_type in ("mysql", "doris"):
+        import pymysql
+        try:
+            conn = pymysql.connect(
+                host=ds.host, port=ds.port, user=ds.username, password=password,
+                database=target_db, charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+                connect_timeout=10, read_timeout=300,
+            )
+        except pymysql.err.MySQLError as e:
+            raise ValueError(f"数据库连接失败：{e.args[-1] if e.args else e}") from e
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(sql)
+                rows = cursor.fetchmany(limit + 1)
+        except pymysql.err.MySQLError as e:
+            raise ValueError(f"查询失败：{e.args[-1] if e.args else e}") from e
+        finally:
+            conn.close()
+    elif ds.source_type == "postgresql":
+        import psycopg2
+        import psycopg2.extras
+        try:
+            conn = psycopg2.connect(
+                host=ds.host, port=ds.port, user=ds.username, password=password,
+                dbname=target_db, connect_timeout=10,
+            )
+        except psycopg2.Error as e:
+            raise ValueError(f"数据库连接失败：{e}") from e
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                cursor.execute(sql)
+                rows = [dict(r) for r in cursor.fetchmany(limit + 1)]
+        except psycopg2.Error as e:
+            raise ValueError(f"查询失败：{e}") from e
+        finally:
+            conn.close()
+    else:
+        raise ValueError(f"Query not supported for source type: {ds.source_type}")
+
+    truncated = len(rows) > limit
+    rows = rows[:limit]
+    elapsed_ms = int((time.time() - start) * 1000)
+    columns = list(rows[0].keys()) if rows else []
+    return {
+        "columns": columns,
+        "rows": rows,
+        "row_count": len(rows),
+        "truncated": truncated,
+        "elapsed_ms": elapsed_ms,
+    }
+
+
+async def list_databases(db: AsyncSession, ds_id: uuid.UUID) -> list[str]:
+    """List all databases accessible on the data source server."""
+    result = await db.execute(select(DataSource).where(DataSource.id == ds_id))
+    ds = result.scalar_one_or_none()
+    if not ds:
+        return []
+    if ds.status != "active":
+        return []
+
+    password = decrypt_value(ds.password_encrypted)
+    system_dbs = {"information_schema", "mysql", "sys", "performance_schema", "postgres", "template0", "template1"}
+
+    if ds.source_type in ("mysql", "doris"):
+        import pymysql
+        try:
+            conn = pymysql.connect(
+                host=ds.host, port=ds.port, user=ds.username, password=password,
+                database="", charset="utf8mb4",
+                connect_timeout=10, read_timeout=30,
+            )
+            with conn.cursor() as cursor:
+                cursor.execute("SHOW DATABASES")
+                rows = cursor.fetchall()
+            conn.close()
+        except Exception:
+            return []
+        names = [r[0] for r in rows]
+        return [n for n in names if n not in system_dbs]
+    elif ds.source_type == "postgresql":
+        import psycopg2
+        try:
+            conn = psycopg2.connect(
+                host=ds.host, port=ds.port, user=ds.username, password=password,
+                dbname=ds.database_name or "postgres", connect_timeout=10,
+            )
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT datname FROM pg_database ORDER BY datname")
+                rows = cursor.fetchall()
+            conn.close()
+        except Exception:
+            return []
+        return [r[0] for r in rows if r[0] not in system_dbs]
+    return []
+
+
 async def list_tables(db: AsyncSession, ds_id: uuid.UUID, schema: Optional[str] = None) -> list[dict]:
     """List tables in the data source."""
     result = await db.execute(select(DataSource).where(DataSource.id == ds_id))
@@ -178,7 +317,7 @@ async def list_tables(db: AsyncSession, ds_id: uuid.UUID, schema: Optional[str] 
 
     password = decrypt_value(ds.password_encrypted)
 
-    if ds.source_type == "mysql":
+    if ds.source_type in ("mysql", "doris"):
         import pymysql
         conn = pymysql.connect(
             host=ds.host, port=ds.port, user=ds.username,
@@ -219,7 +358,7 @@ async def get_table_columns(
 
     password = decrypt_value(ds.password_encrypted)
 
-    if ds.source_type == "mysql":
+    if ds.source_type in ("mysql", "doris"):
         import pymysql
         conn = pymysql.connect(
             host=ds.host, port=ds.port, user=ds.username,

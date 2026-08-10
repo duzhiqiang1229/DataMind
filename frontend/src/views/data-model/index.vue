@@ -1,183 +1,270 @@
 <template>
   <div class="data-model-page">
-    <!-- Top toolbar -->
-    <el-card class="toolbar-card" shadow="never">
-      <el-form :inline="true" class="toolbar-form" @submit.prevent>
-        <el-form-item label="模型名称">
-          <el-input v-model="currentModel.model_name" placeholder="模型名称" style="width: 180px;" />
-        </el-form-item>
-        <el-form-item label="模型编码">
-          <el-input v-model="currentModel.model_code" placeholder="唯一编码" style="width: 180px;" :disabled="!isNewModel" />
-        </el-form-item>
-        <el-form-item label="分层">
-          <el-select v-model="currentModel.layer" style="width: 110px;">
-            <el-option label="ODS" value="ods" />
-            <el-option label="DWD" value="dwd" />
-            <el-option label="DWS" value="dws" />
-            <el-option label="ADS" value="ads" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="数据库">
-          <el-input v-model="currentModel.database" placeholder="如 ods" style="width: 140px;" />
-        </el-form-item>
-        <el-form-item label="表名">
-          <el-input v-model="currentModel.table_name" placeholder="如 ods_user" style="width: 180px;" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="currentModel.description" placeholder="模型描述" style="width: 220px;" />
-        </el-form-item>
-        <el-form-item>
+    <el-card>
+      <template #header>
+        <div class="card-header">
+        <span>模型设计</span>
           <el-button type="primary" :icon="Plus" @click="handleNewModel">新建模型</el-button>
-          <el-button type="success" :icon="Check" :loading="saving" @click="handleSaveModel">保存模型</el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </template>
+
+      <div class="search-bar">
+        <el-input
+          v-model="search.keyword"
+          placeholder="搜索模型名称/编码"
+          clearable
+          :prefix-icon="Search"
+          style="width: 220px;"
+          @keyup.enter="handleSearch"
+          @clear="handleSearch"
+        />
+        <el-select v-model="search.layer" placeholder="分层" clearable style="width: 110px;" @change="handleSearch">
+          <el-option label="ODS" value="ods" />
+          <el-option label="DWD" value="dwd" />
+          <el-option label="DWS" value="dws" />
+          <el-option label="ADS" value="ads" />
+        </el-select>
+        <el-select v-model="search.data_domain" placeholder="数据域" clearable filterable style="width: 130px;" @change="handleSearch">
+          <el-option v-for="d in dataDomains" :key="d.domain_code" :label="d.domain_name" :value="d.domain_name" />
+        </el-select>
+        <el-select v-model="search.business_domain" placeholder="业务过程" clearable filterable style="width: 130px;" @change="handleSearch">
+          <el-option v-for="d in businessDomains" :key="d.domain_code" :label="d.domain_name" :value="d.domain_name" />
+        </el-select>
+        <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+        <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
+      </div>
+
+      <el-table :data="modelList" v-loading="loading" border>
+        <el-table-column prop="model_name" label="模型名称" min-width="150" show-overflow-tooltip />
+        <el-table-column label="分层" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="layerTag(row.layer)" size="small" effect="plain">
+              {{ (row.layer || "").toUpperCase() }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="数据域" width="100">
+          <template #default="{ row }">{{ row.data_domain || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="业务过程" width="100">
+          <template #default="{ row }">{{ row.business_domain || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="库表" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.database }}.{{ row.table_name }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
+              {{ row.status === 'active' ? '已发布' : '草稿' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="current_version" label="版本" width="70" align="center" />
+        <el-table-column label="更新时间" width="170">
+          <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="warning" @click="handlePublish(row)">发布</el-button>
+            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-pagination
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.page_size"
+        :total="pagination.total"
+        layout="total, prev, pager, next, jumper"
+        @current-change="loadData"
+        style="margin-top: 16px; justify-content: flex-end;"
+      />
     </el-card>
 
-    <!-- Three-column layout -->
-    <el-row :gutter="12" class="main-row">
-      <!-- Left column: Model directory tree -->
-      <el-col :span="5">
-        <el-card shadow="never" class="tree-card">
-          <template #header>
-            <div class="card-header">
-              <span>模型目录</span>
-              <el-button text type="primary" :icon="Refresh" @click="loadTree" />
-            </div>
+    <!-- 新建/编辑基本信息对话框 -->
+    <el-dialog v-model="infoDialogVisible" :title="isNewModel ? '新建模型' : '编辑模型'" width="760px" @close="resetInfoForm">
+      <el-form ref="infoFormRef" :model="currentModel" :rules="infoRules" label-width="70px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="模型名称" prop="model_name">
+              <el-input v-model="currentModel.model_name" placeholder="模型名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="分层" prop="layer">
+              <el-select v-model="currentModel.layer" style="width: 100%;">
+                <el-option label="ODS" value="ods" />
+                <el-option label="DWD" value="dwd" />
+                <el-option label="DWS" value="dws" />
+                <el-option label="ADS" value="ads" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="数据库" prop="database">
+              <el-input v-model="currentModel.database" placeholder="如 ods" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="数据域">
+              <el-select
+                v-model="currentModel.data_domain"
+                placeholder="选择数据域"
+                clearable
+                filterable
+                allow-create
+                style="width: 100%;"
+              >
+                <el-option v-for="d in dataDomains" :key="d.domain_code" :label="d.domain_name" :value="d.domain_name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="业务过程">
+              <el-select
+                v-model="currentModel.business_domain"
+                placeholder="选择业务过程"
+                clearable
+                filterable
+                allow-create
+                style="width: 100%;"
+              >
+                <el-option v-for="d in businessDomains" :key="d.domain_code" :label="d.domain_name" :value="d.domain_name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="表名" prop="table_name">
+              <el-input v-model="currentModel.table_name" placeholder="如 ods_user" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="描述">
+              <el-input v-model="currentModel.description" type="textarea" :rows="2" placeholder="模型描述" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <el-button @click="infoDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSaveInfo">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑模型对话框（基本信息 + 字段设计） -->
+    <el-dialog v-model="editDialogVisible" :title="`编辑模型 - ${currentModel.model_name || ''}`" width="920px" top="5vh">
+      <el-form ref="editFormRef" :model="currentModel" :rules="infoRules" label-width="70px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="模型名称" prop="model_name">
+              <el-input v-model="currentModel.model_name" placeholder="模型名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="分层" prop="layer">
+              <el-select v-model="currentModel.layer" style="width: 100%;">
+                <el-option label="ODS" value="ods" />
+                <el-option label="DWD" value="dwd" />
+                <el-option label="DWS" value="dws" />
+                <el-option label="ADS" value="ads" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="数据库" prop="database">
+              <el-input v-model="currentModel.database" placeholder="如 ods" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="数据域">
+              <el-select v-model="currentModel.data_domain" placeholder="选择数据域" clearable filterable allow-create style="width: 100%;">
+                <el-option v-for="d in dataDomains" :key="d.domain_code" :label="d.domain_name" :value="d.domain_name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="业务过程">
+              <el-select v-model="currentModel.business_domain" placeholder="选择业务过程" clearable filterable allow-create style="width: 100%;">
+                <el-option v-for="d in businessDomains" :key="d.domain_code" :label="d.domain_name" :value="d.domain_name" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="表名" prop="table_name">
+              <el-input v-model="currentModel.table_name" placeholder="如 ods_user" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="描述">
+              <el-input v-model="currentModel.description" type="textarea" :rows="2" placeholder="模型描述" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <el-divider content-position="left">字段设计</el-divider>
+      <el-table :data="fields" border size="default" max-height="320">
+        <el-table-column type="index" label="#" width="42" />
+        <el-table-column label="字段名" width="170">
+          <template #default="{ row }">
+            <el-input v-model="row.field_name" size="small" placeholder="field_name" @input="regenerateDDL" />
           </template>
-          <el-input
-            v-model="treeFilter"
-            placeholder="搜索模型..."
-            clearable
-            size="small"
-            style="margin-bottom: 12px;"
-          />
-          <el-tree
-            ref="treeRef"
-            :data="treeData"
-            :props="treeProps"
-            node-key="id"
-            highlight-current
-            default-expand-all
-            :filter-node-method="filterNode"
-            @node-click="handleNodeClick"
-          >
-            <template #default="{ node, data }">
-              <span class="tree-node">
-                <span v-if="data.type === 'layer'" class="tree-layer">
-                  <el-tag :type="layerTag(data.layer as string)" size="small">{{ data.label }}</el-tag>
-                </span>
-                <span v-else class="tree-model">
-                  <el-icon><Document /></el-icon>
-                  <span class="tree-model-name">{{ data.label }}</span>
-                  <el-tag
-                    v-if="data.status === 'active'"
-                    type="success"
-                    size="small"
-                    effect="plain"
-                  >启用</el-tag>
-                  <el-tag v-else type="info" size="small" effect="plain">草稿</el-tag>
-                </span>
-              </span>
-            </template>
-          </el-tree>
-        </el-card>
-      </el-col>
-
-      <!-- Middle column: Field design table -->
-      <el-col :span="12">
-        <el-card shadow="never" class="fields-card">
-          <template #header>
-            <div class="card-header">
-              <div class="fields-title">
-                <span>字段设计</span>
-                <el-tag v-if="selectedModelId" type="primary" size="small" effect="plain" style="margin-left: 8px;">
-                  {{ currentModel.model_name || '未命名' }}
-                </el-tag>
-                <el-tag v-if="currentModel.current_version" type="warning" size="small" effect="plain" style="margin-left: 4px;">
-                  v{{ currentModel.current_version }}
-                </el-tag>
-              </div>
-              <el-button type="primary" size="small" :icon="Plus" @click="addField">添加字段</el-button>
-            </div>
+        </el-table-column>
+        <el-table-column label="字段类型" width="160">
+          <template #default="{ row }">
+            <el-select v-model="row.field_type" size="small" filterable allow-create style="width: 100%;" @change="regenerateDDL">
+              <el-option v-for="t in fieldTypes" :key="t" :label="t" :value="t" />
+            </el-select>
           </template>
-
-          <el-table :data="fields" border size="default" style="width: 100%;" max-height="560">
-            <el-table-column type="index" label="#" width="42" />
-            <el-table-column label="字段名" width="160">
-              <template #default="{ row }">
-                <el-input v-model="row.field_name" size="small" placeholder="field_name" @input="regenerateDDL" />
-              </template>
-            </el-table-column>
-            <el-table-column label="字段类型" width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.field_type" size="small" placeholder="VARCHAR(255)" @input="regenerateDDL" />
-              </template>
-            </el-table-column>
-            <el-table-column label="字段注释" min-width="150">
-              <template #default="{ row }">
-                <el-input v-model="row.field_comment" size="small" placeholder="注释" />
-              </template>
-            </el-table-column>
-            <el-table-column label="主键" width="60" align="center">
-              <template #default="{ row }">
-                <el-checkbox v-model="row.is_primary_key" @change="regenerateDDL" />
-              </template>
-            </el-table-column>
-            <el-table-column label="分区" width="60" align="center">
-              <template #default="{ row }">
-                <el-checkbox v-model="row.is_partition" @change="regenerateDDL" />
-              </template>
-            </el-table-column>
-            <el-table-column label="默认值" width="140">
-              <template #default="{ row }">
-                <el-input v-model="row.default_value" size="small" placeholder="默认值" @input="regenerateDDL" />
-              </template>
-            </el-table-column>
-            <el-table-column label="排序" width="70" align="center">
-              <template #default="{ row, $index }">
-                <el-input-number
-                  v-model="row.sort_order"
-                  size="small"
-                  :min="0"
-                  :controls="false"
-                  style="width: 50px;"
-                  @change="onSortChange($index)"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="70" align="center">
-              <template #default="{ $index }">
-                <el-button text type="danger" size="small" :icon="Delete" @click="removeField($index)" />
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <el-empty v-if="!fields.length" description="暂无字段，点击「添加字段」开始设计" />
-        </el-card>
-      </el-col>
-
-      <!-- Right column: DDL preview -->
-      <el-col :span="7">
-        <el-card shadow="never" class="ddl-card">
-          <template #header>
-            <div class="card-header">
-              <span>DDL 预览</span>
-              <div>
-                <el-button text type="primary" :icon="DocumentCopy" @click="copyDDL">复制</el-button>
-                <el-button type="warning" size="small" :icon="Stamp" :loading="versioning" @click="handleSaveVersion">保存版本</el-button>
-                <el-button type="success" size="small" :icon="Promotion" :loading="publishing" @click="handlePublish">发布</el-button>
-              </div>
-            </div>
+        </el-table-column>
+        <el-table-column label="字段注释" min-width="140">
+          <template #default="{ row }">
+            <el-input v-model="row.field_comment" size="small" placeholder="注释" @input="regenerateDDL" />
           </template>
-          <div class="ddl-actions">
-            <el-button text size="small" :icon="Clock" @click="openVersionHistory">版本历史</el-button>
-          </div>
-          <pre class="ddl-preview"><code>{{ ddlText }}</code></pre>
-        </el-card>
-      </el-col>
-    </el-row>
+        </el-table-column>
+        <el-table-column label="主键" width="60" align="center">
+          <template #default="{ row }">
+            <el-checkbox v-model="row.is_primary_key" @change="regenerateDDL" />
+          </template>
+        </el-table-column>
+        <el-table-column label="分区" width="60" align="center">
+          <template #default="{ row }">
+            <el-checkbox v-model="row.is_partition" @change="regenerateDDL" />
+          </template>
+        </el-table-column>
+        <el-table-column label="默认值" width="120">
+          <template #default="{ row }">
+            <el-input v-model="row.default_value" size="small" placeholder="默认值" @input="regenerateDDL" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="70" align="center">
+          <template #default="{ $index }">
+            <el-button link type="danger" :icon="Delete" @click="removeField($index)" />
+          </template>
+        </el-table-column>
+      </el-table>
 
-    <!-- Version history dialog -->
+      <div class="field-actions">
+        <el-button link type="primary" :icon="Plus" @click="addField">添加字段</el-button>
+        <el-button link type="primary" :icon="Clock" @click="openVersionHistory(currentModel)">版本历史</el-button>
+      </div>
+
+      <div class="ddl-block">
+        <div class="ddl-header">
+          <span>DDL 预览</span>
+          <el-button link type="primary" :icon="DocumentCopy" @click="copyDDL">复制</el-button>
+        </div>
+        <pre class="ddl-preview"><code>{{ ddlText }}</code></pre>
+      </div>
+
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSaveEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 版本历史对话框 -->
     <el-dialog v-model="versionDialogVisible" title="版本历史" width="640px">
       <el-empty v-if="!versions.length" description="暂无版本记录" />
       <el-timeline v-else>
@@ -191,29 +278,33 @@
           <el-card shadow="never" class="version-item">
             <div class="version-header">
               <el-tag type="primary" size="small">版本 {{ v.version }}</el-tag>
-              <span class="version-time">{{ v.created_at }}</span>
+              <span class="version-time">{{ formatTime(v.created_at) }}</span>
             </div>
             <p class="version-log">{{ v.change_log }}</p>
           </el-card>
         </el-timeline-item>
       </el-timeline>
     </el-dialog>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, nextTick } from "vue";
+import { ref, reactive, watch, onMounted, nextTick } from "vue";
 import {
-  Plus, Check, Refresh, Delete, Document, DocumentCopy,
-  Stamp, Promotion, Clock,
+  Plus, Search, RefreshLeft, Delete, DocumentCopy, Clock,
 } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";
-import type { ElTree } from "element-plus";
 import { dataModelApi } from "@/api";
+import { formatDateTime } from "@/utils/format";
 
 type TagType = "primary" | "success" | "warning" | "info" | "danger";
 
-// ---------- Types ----------
+const fieldTypes = [
+  "BIGINT", "INT", "VARCHAR(255)", "VARCHAR(50)", "DECIMAL(12,2)",
+  "DOUBLE", "DATETIME", "DATE", "BOOLEAN", "TEXT",
+];
+
 interface ModelField {
   id?: string;
   field_name: string;
@@ -233,18 +324,11 @@ interface DataModel {
   database: string;
   table_name: string;
   description: string;
+  business_domain?: string;
+  data_domain?: string;
   status?: string;
   current_version?: number;
   fields: ModelField[];
-}
-
-interface TreeNode {
-  id: string;
-  label: string;
-  type: "layer" | "model";
-  layer?: string;
-  status?: string;
-  children?: TreeNode[];
 }
 
 interface Version {
@@ -255,14 +339,18 @@ interface Version {
 }
 
 // ---------- State ----------
-const treeRef = ref<InstanceType<typeof ElTree>>();
-const treeData = ref<TreeNode[]>([]);
-const treeFilter = ref("");
-const treeProps = { label: "label", children: "children" };
+const loading = ref(false);
+const modelList = ref<DataModel[]>([]);
+const pagination = reactive({ page: 1, page_size: 20, total: 0 });
+const search = reactive({ keyword: "", layer: "", business_domain: "", data_domain: "" });
 
-const allModels = ref<DataModel[]>([]);
-const selectedModelId = ref<string>("");
+const selectedModelId = ref("");
 const isNewModel = ref(false);
+const infoDialogVisible = ref(false);
+const editDialogVisible = ref(false);
+const saving = ref(false);
+const infoFormRef = ref<FormInstance>();
+const editFormRef = ref<FormInstance>();
 
 const currentModel = reactive<DataModel>({
   model_name: "",
@@ -271,6 +359,8 @@ const currentModel = reactive<DataModel>({
   database: "ods",
   table_name: "",
   description: "",
+  business_domain: "",
+  data_domain: "",
   status: "draft",
   current_version: 0,
   fields: [],
@@ -279,38 +369,36 @@ const currentModel = reactive<DataModel>({
 const fields = ref<ModelField[]>([]);
 const ddlText = ref("");
 
-const saving = ref(false);
-const versioning = ref(false);
-const publishing = ref(false);
-const loadingTree = ref(false);
+const businessDomains = ref<any[]>([]);
+const dataDomains = ref<any[]>([]);
 
 const versionDialogVisible = ref(false);
 const versions = ref<Version[]>([]);
 
+const infoRules = {
+  model_name: [{ required: true, message: "请输入模型名称", trigger: "blur" }],
+  layer: [{ required: true, message: "请选择分层", trigger: "change" }],
+  database: [{ required: true, message: "请输入数据库", trigger: "blur" }],
+  table_name: [{ required: true, message: "请输入表名", trigger: "blur" }],
+};
+
 // ---------- DDL Generation ----------
-function generateDDL(model: DataModel, fields: ModelField[]): string {
-  if (!fields.length) {
-    const dbName = model.database || "db";
-    const tbl = model.table_name || "table";
-    return `CREATE TABLE IF NOT EXISTS ${dbName}.${tbl} (\n  -- 暂无字段\n)\nDISTRIBUTED BY HASH(id) BUCKETS 10\nPROPERTIES (\n  'replication_num' = '1'\n);`;
+function generateDDL(model: DataModel, modelFields: ModelField[]): string {
+  if (!modelFields.length) {
+    return `CREATE TABLE IF NOT EXISTS ${model.database || "db"}.${model.table_name || "table"} (\n  -- 暂无字段\n)\nDISTRIBUTED BY HASH(id) BUCKETS 10\nPROPERTIES (\n  'replication_num' = '1'\n);`;
   }
-
-  const sortedFields = [...fields].sort((a, b) => a.sort_order - b.sort_order);
-
-  const cols = sortedFields.map((f) => {
-    let line = `  ${f.field_name || 'unnamed'} ${f.field_type || 'VARCHAR(255)'}`;
+  const sorted = [...modelFields].sort((a, b) => a.sort_order - b.sort_order);
+  const cols = sorted.map((f) => {
+    let line = `  ${f.field_name || "unnamed"} ${f.field_type || "VARCHAR(255)"}`;
     if (f.is_primary_key) line += " KEY";
     if (f.default_value) line += ` DEFAULT '${f.default_value}'`;
     return line;
   });
-
-  const pkFields = sortedFields.filter((f) => f.is_primary_key).map((f) => f.field_name);
-  const partitionFields = sortedFields.filter((f) => f.is_partition).map((f) => f.field_name);
-
-  let ddl = `CREATE TABLE IF NOT EXISTS ${model.database || "db"}.${model.table_name || "table"} (\n${cols.join(",\n")}\n)\nDISTRIBUTED BY HASH(${pkFields.join(", ") || "id"}) BUCKETS 10`;
-  if (partitionFields.length) ddl += `\nPARTITION BY (${partitionFields.join(", ")})`;
+  const pk = sorted.filter((f) => f.is_primary_key).map((f) => f.field_name);
+  const part = sorted.filter((f) => f.is_partition).map((f) => f.field_name);
+  let ddl = `CREATE TABLE IF NOT EXISTS ${model.database || "db"}.${model.table_name || "table"} (\n${cols.join(",\n")}\n)\nDISTRIBUTED BY HASH(${pk.join(", ") || "id"}) BUCKETS 10`;
+  if (part.length) ddl += `\nPARTITION BY (${part.join(", ")})`;
   ddl += `\nPROPERTIES (\n  'replication_num' = '1'\n);`;
-
   return ddl;
 }
 
@@ -318,84 +406,122 @@ function regenerateDDL() {
   ddlText.value = generateDDL(currentModel, fields.value);
 }
 
-// Watch currentModel property changes to regenerate DDL
 watch(
   () => [currentModel.database, currentModel.table_name],
   () => regenerateDDL()
 );
+watch(fields, () => regenerateDDL(), { deep: true });
 
-watch(
-  () => fields.value,
-  () => regenerateDDL(),
-  { deep: true }
-);
-
-// ---------- Tree ----------
-function buildTree(models: DataModel[]): TreeNode[] {
-  const layerMap: Record<string, string> = { ods: "ODS", dwd: "DWD", dws: "DWS", ads: "ADS" };
-  const layerOrder = ["ods", "dwd", "dws", "ads"];
-
-  const tree: TreeNode[] = layerOrder.map((layer) => {
-    const layerModels = models.filter((m) => m.layer === layer);
-    return {
-      id: `layer-${layer}`,
-      label: layerMap[layer] || layer.toUpperCase(),
-      type: "layer" as const,
-      layer,
-      children: layerModels.map((m) => ({
-        id: m.id || m.model_code,
-        label: m.model_name,
-        type: "model" as const,
-        status: m.status,
-        children: undefined,
-      })),
-    };
-  });
-
-  return tree;
-}
-
-async function loadTree() {
-  loadingTree.value = true;
+// ---------- Data loading ----------
+async function loadData() {
+  loading.value = true;
   try {
-    const res = await dataModelApi.list({ page: 1, page_size: 1000 });
-    allModels.value = (res.items || []) as DataModel[];
-    treeData.value = buildTree(allModels.value);
+    const res = await dataModelApi.list({
+      page: pagination.page,
+      page_size: pagination.page_size,
+      keyword: search.keyword || undefined,
+      layer: search.layer || undefined,
+      business_domain: search.business_domain || undefined,
+      data_domain: search.data_domain || undefined,
+    });
+    modelList.value = (res.items || []) as DataModel[];
+    pagination.total = res.total || 0;
   } catch {
     ElMessage.error("加载模型列表失败");
   } finally {
-    loadingTree.value = false;
+    loading.value = false;
   }
 }
 
-function filterNode(value: string, data: any): boolean {
-  if (!value) return true;
-  return (data.label || "").toLowerCase().includes(value.toLowerCase());
+function handleSearch() {
+  pagination.page = 1;
+  loadData();
 }
 
-watch(treeFilter, (val) => {
-  treeRef.value?.filter(val);
-});
-
-function handleNodeClick(node: TreeNode) {
-  if (node.type !== "model") return;
-  const model = allModels.value.find((m) => (m.id || m.model_code) === node.id);
-  if (!model) return;
-  selectModel(model);
+function handleReset() {
+  Object.assign(search, { keyword: "", layer: "", business_domain: "", data_domain: "" });
+  pagination.page = 1;
+  loadData();
 }
 
-function selectModel(model: DataModel) {
-  selectedModelId.value = model.id || model.model_code;
-  isNewModel.value = false;
+// ---------- Model info ----------
+function resetInfoForm() {
+  infoFormRef.value?.resetFields();
   Object.assign(currentModel, {
-    ...model,
-    fields: (model.fields || []).map((f) => ({ ...f })),
+    id: undefined,
+    model_name: "",
+    model_code: "",
+    layer: "ods",
+    database: "ods",
+    table_name: "",
+    description: "",
+    business_domain: "",
+    data_domain: "",
+    status: "draft",
+    current_version: 0,
+    fields: [],
   });
-  fields.value = (model.fields || []).map((f) => ({ ...f }));
+  fields.value = [];
+}
+
+function handleNewModel() {
+  isNewModel.value = true;
+  selectedModelId.value = "";
+  resetInfoForm();
+  infoDialogVisible.value = true;
+}
+
+function handleEdit(row: DataModel) {
+  isNewModel.value = false;
+  selectedModelId.value = row.id || "";
+  Object.assign(currentModel, {
+    ...row,
+    fields: (row.fields || []).map((f) => ({ ...f })),
+  });
+  fields.value = (row.fields || []).map((f) => ({ ...f, sort_order: f.sort_order ?? 0 }));
+  regenerateDDL();
+  editDialogVisible.value = true;
+}
+
+async function handleSaveInfo() {
+  if (!infoFormRef.value) return;
+  await infoFormRef.value.validate(async (valid) => {
+    if (!valid) return;
+    saving.value = true;
+    try {
+      const payload: any = {
+        model_name: currentModel.model_name,
+        layer: currentModel.layer,
+        database: currentModel.database,
+        table_name: currentModel.table_name,
+        description: currentModel.description || null,
+        business_domain: currentModel.business_domain || null,
+        data_domain: currentModel.data_domain || null,
+      };
+      if (isNewModel.value) {
+        const created = await dataModelApi.create({ ...payload, fields: [] });
+        selectedModelId.value = created.id || created.model_code;
+        ElMessage.success("模型创建成功");
+      } else {
+        await dataModelApi.update(selectedModelId.value, payload);
+        ElMessage.success("模型保存成功");
+      }
+      infoDialogVisible.value = false;
+      loadData();
+    } catch {
+      ElMessage.error("保存失败");
+    } finally {
+      saving.value = false;
+    }
+  });
+}
+
+function removeField(index: number) {
+  fields.value.splice(index, 1);
+  fields.value.forEach((f, i) => { f.sort_order = i; });
   regenerateDDL();
 }
 
-// ---------- Field operations ----------
 function addField() {
   fields.value.push({
     field_name: "",
@@ -409,199 +535,96 @@ function addField() {
   regenerateDDL();
 }
 
-function removeField(index: number) {
-  fields.value.splice(index, 1);
-  // Reindex sort_order
-  fields.value.forEach((f, i) => {
-    f.sort_order = i;
-  });
-  regenerateDDL();
-}
-
-function onSortChange(_index: number) {
-  fields.value.sort((a, b) => a.sort_order - b.sort_order);
-  // Reindex
-  fields.value.forEach((f, i) => {
-    f.sort_order = i;
-  });
-  regenerateDDL();
-}
-
-// ---------- Model operations ----------
-function handleNewModel() {
-  selectedModelId.value = "";
-  isNewModel.value = true;
-  Object.assign(currentModel, {
-    id: undefined,
-    model_name: "",
-    model_code: "",
-    layer: "ods",
-    database: "ods",
-    table_name: "",
-    description: "",
-    status: "draft",
-    current_version: 0,
-    fields: [],
-  });
-  fields.value = [];
-  regenerateDDL();
-  ElMessage.info("已创建空白模型，请填写信息并添加字段");
-}
-
-async function handleSaveModel() {
-  if (!currentModel.model_name) {
-    ElMessage.warning("请输入模型名称");
+async function handleSaveEdit() {
+  if (!selectedModelId.value) {
+    ElMessage.warning("模型不存在");
     return;
   }
-  if (!currentModel.model_code) {
-    ElMessage.warning("请输入模型编码");
-    return;
-  }
-  if (!currentModel.table_name) {
-    ElMessage.warning("请输入表名");
-    return;
-  }
-
+  if (!editFormRef.value) return;
+  await editFormRef.value.validate(async (valid) => {
+    if (!valid) return;
   saving.value = true;
   try {
-    const payload: DataModel = {
-      ...currentModel,
+    const payload: any = {
+      model_name: currentModel.model_name,
+      layer: currentModel.layer,
+      database: currentModel.database,
+      table_name: currentModel.table_name,
+      description: currentModel.description || null,
+      business_domain: currentModel.business_domain || null,
+      data_domain: currentModel.data_domain || null,
       fields: fields.value.map((f, i) => ({
-        ...f,
+        field_name: f.field_name,
+        field_type: f.field_type,
+        field_comment: f.field_comment,
+        is_primary_key: f.is_primary_key,
+        is_partition: f.is_partition,
+        default_value: f.default_value,
         sort_order: f.sort_order ?? i,
       })),
     };
-
-    if (isNewModel.value || !selectedModelId.value) {
-      const created = await dataModelApi.create(payload);
-      ElMessage.success("模型创建成功");
-      selectedModelId.value = created.id || created.model_code;
-      isNewModel.value = false;
-      Object.assign(currentModel, created);
-    } else {
-      const updated = await dataModelApi.update(selectedModelId.value, payload);
-      ElMessage.success("模型保存成功");
-      Object.assign(currentModel, updated);
-    }
-
-    await loadTree();
-    // Re-select current model in tree
-    nextTick(() => {
-      if (selectedModelId.value) {
-        treeRef.value?.setCurrentKey(selectedModelId.value);
-      }
-    });
+    const updated = await dataModelApi.update(selectedModelId.value, payload);
+    Object.assign(currentModel, updated);
+    ElMessage.success("模型保存成功");
+    editDialogVisible.value = false;
+    loadData();
   } catch {
-    ElMessage.error("保存模型失败");
+    ElMessage.error("保存字段失败");
   } finally {
     saving.value = false;
   }
+  });
 }
 
-async function handleSaveVersion() {
-  if (!selectedModelId.value) {
-    ElMessage.warning("请先选择或保存模型");
-    return;
-  }
-
-  let changeLog = "";
-  try {
-    const { value } = await ElMessageBox.prompt("请输入版本变更说明", "保存版本", {
-      confirmButtonText: "保存",
-      cancelButtonText: "取消",
-      inputType: "textarea",
-      inputPlaceholder: "例如：新增 user_type 字段",
-      inputValidator: (val: string) => {
-        if (!val || !val.trim()) return "变更说明不能为空";
-        return true;
-      },
-    });
-    changeLog = value.trim();
-  } catch {
-    return; // cancelled
-  }
-
-  versioning.value = true;
-  try {
-    // First save the model, then create a version snapshot
-    const payload: DataModel = {
-      ...currentModel,
-      fields: fields.value.map((f, i) => ({
-        ...f,
-        sort_order: f.sort_order ?? i,
-      })),
-    };
-    const updated = await dataModelApi.update(selectedModelId.value, payload);
-    Object.assign(currentModel, updated);
-
-    // The version snapshot is created via the update + a version API call
-    // Depending on backend, versions may be auto-created on update.
-    // If a separate API is needed, call it here:
-    // await dataModelApi.createVersion(selectedModelId.value, { change_log: changeLog });
-
-    ElMessage.success(`版本已保存：${changeLog}`);
-    await loadTree();
-  } catch {
-    ElMessage.error("保存版本失败");
-  } finally {
-    versioning.value = false;
-  }
-}
-
-async function handlePublish() {
-  if (!selectedModelId.value) {
-    ElMessage.warning("请先选择或保存模型");
-    return;
-  }
-
-  try {
-    await ElMessageBox.confirm(
-      `确认发布模型 "${currentModel.model_name}" ? 发布后模型状态将变为「已启用」。`,
-      "发布确认",
-      { type: "warning", confirmButtonText: "发布", cancelButtonText: "取消" }
-    );
-  } catch {
-    return; // cancelled
-  }
-
-  publishing.value = true;
-  try {
-    const payload: DataModel = {
-      ...currentModel,
-      status: "active",
-      fields: fields.value.map((f, i) => ({
-        ...f,
-        sort_order: f.sort_order ?? i,
-      })),
-    };
-    const updated = await dataModelApi.update(selectedModelId.value, payload);
-    Object.assign(currentModel, updated);
-    ElMessage.success("模型发布成功");
-    await loadTree();
-    nextTick(() => {
-      if (selectedModelId.value) {
-        treeRef.value?.setCurrentKey(selectedModelId.value);
-      }
-    });
-  } catch {
-    ElMessage.error("发布失败");
-  } finally {
-    publishing.value = false;
-  }
-}
-
-// ---------- Version history ----------
-async function openVersionHistory() {
-  if (!selectedModelId.value) {
+async function openVersionHistory(row: DataModel) {
+  const id = row.id || selectedModelId.value;
+  if (!id) {
     ElMessage.warning("请先选择模型");
     return;
   }
   try {
-    const res = await dataModelApi.versions(selectedModelId.value);
+    const res = await dataModelApi.versions(id);
     versions.value = (res || []) as Version[];
     versionDialogVisible.value = true;
   } catch {
     ElMessage.error("加载版本历史失败");
+  }
+}
+
+// ---------- Publish & delete ----------
+async function handlePublish(row: DataModel) {
+  if (!row.id) return;
+  try {
+    await ElMessageBox.confirm(
+      `确认发布模型 "${row.model_name}"？系统将生成建表语句并在 Doris 中创建 ${row.database}.${row.table_name}。`,
+      "发布确认",
+      { type: "warning", confirmButtonText: "发布并建表", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  try {
+    await dataModelApi.publish(row.id);
+    ElMessage.success("发布成功，建表已完成");
+    loadData();
+  } catch {
+    // handled by interceptor
+  }
+}
+
+async function handleDelete(row: DataModel) {
+  if (!row.id) return;
+  await ElMessageBox.confirm(
+    `确认删除模型 "${row.model_name}"？将同时删除 Doris 库中的 ${row.database}.${row.table_name} 表。`,
+    "删除确认",
+    { type: "warning" }
+  );
+  try {
+    await dataModelApi.delete(row.id);
+    ElMessage.success("删除成功");
+    loadData();
+  } catch {
+    ElMessage.error("删除失败");
   }
 }
 
@@ -617,167 +640,96 @@ async function copyDDL() {
 
 // ---------- Helpers ----------
 function layerTag(layer: string): TagType {
-  const map: Record<string, TagType> = {
-    ods: "info",
-    dwd: "primary",
-    dws: "warning",
-    ads: "danger",
-  };
+  const map: Record<string, TagType> = { ods: "info", dwd: "primary", dws: "warning", ads: "danger" };
   return map[layer] || "info";
 }
 
-// Suppress unused import warning for FormInstance (re-exported by api module)
-void (null as unknown as FormInstance);
+function formatTime(iso: string | null | undefined): string {
+  return formatDateTime(iso);
+}
 
-// ---------- Init ----------
+async function loadDomains() {
+  try {
+    const [b, d] = await Promise.all([
+      dataModelApi.businessDomains(),
+      dataModelApi.dataDomains(),
+    ]);
+    businessDomains.value = b || [];
+    dataDomains.value = d || [];
+  } catch {
+    // handled
+  }
+}
+
 onMounted(() => {
-  loadTree().then(() => {
-    regenerateDDL();
-  });
+  loadData();
+  loadDomains();
 });
 </script>
 
 <style lang="scss" scoped>
-.data-model-page {
-  padding: 12px;
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 
-  .toolbar-card {
-    margin-bottom: 12px;
+.field-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
 
-    .toolbar-form {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: flex-end;
-      gap: 0;
-
-      .el-form-item {
-        margin-bottom: 8px;
-        margin-right: 12px;
-      }
-    }
-  }
-
-  .main-row {
-    align-items: stretch;
-
-    .el-col {
-      min-height: 600px;
-    }
-  }
-
-  .card-header {
+.ddl-block {
+  .ddl-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    min-height: 32px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
   }
 
-  // Tree card
-  .tree-card {
-    height: 100%;
+  .ddl-preview {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border-radius: 6px;
+    padding: 14px;
+    margin: 0;
+    font-family: "Fira Code", "Consolas", "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: auto;
+    max-height: 260px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
 
-    :deep(.el-card__body) {
-      padding: 12px;
-      max-height: 600px;
-      overflow-y: auto;
-    }
-
-    .tree-node {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding-right: 8px;
-      font-size: 13px;
-    }
-
-    .tree-layer {
-      font-weight: 600;
-    }
-
-    .tree-model {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-
-      .tree-model-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 120px;
-      }
+    code {
+      font-family: inherit;
+      color: inherit;
     }
   }
+}
 
-  // Fields card
-  .fields-card {
-    height: 100%;
+.version-item {
+  .version-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
 
-    .card-header {
-      .fields-title {
-        display: flex;
-        align-items: center;
-      }
-    }
-
-    :deep(.el-card__body) {
-      padding: 12px;
+    .version-time {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
     }
   }
 
-  // DDL card
-  .ddl-card {
-    height: 100%;
-
-    .ddl-actions {
-      margin-bottom: 8px;
-    }
-
-    :deep(.el-card__body) {
-      padding: 12px;
-    }
-
-    .ddl-preview {
-      background: #1e1e1e;
-      color: #d4d4d4;
-      border-radius: 6px;
-      padding: 16px;
-      margin: 0;
-      font-family: "Fira Code", "Consolas", "Courier New", monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      overflow-x: auto;
-      max-height: 520px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
-
-      code {
-        font-family: inherit;
-        color: inherit;
-      }
-    }
-  }
-
-  // Version dialog
-  .version-item {
-    .version-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
-
-      .version-time {
-        font-size: 12px;
-        color: var(--el-text-color-secondary);
-      }
-    }
-
-    .version-log {
-      margin: 0;
-      font-size: 14px;
-      color: var(--el-text-color-primary);
-    }
+  .version-log {
+    margin: 0;
+    font-size: 14px;
+    color: var(--el-text-color-primary);
   }
 }
 </style>

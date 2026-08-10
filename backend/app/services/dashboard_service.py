@@ -5,7 +5,11 @@ from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
-from app.models import DataSource, DataXTask, SparkTask, TaskInstance, QueryHistory, ComponentConfig
+from app.models import (
+    DataSource, DataXTask, SparkTask, TaskInstance, QueryHistory,
+    ComponentConfig, AirflowDagRun, MetricDefinition, DataServiceApi,
+)
+from app.services.airflow_service import list_dags as list_airflow_dags
 from app.services.component_service import get_airflow_client, get_doris_client, get_cube_client, get_openmetadata_client
 
 
@@ -16,13 +20,35 @@ async def get_stats(db: AsyncSession) -> dict:
     # data sources
     ds_total = (await db.execute(select(func.count(DataSource.id)))).scalar_one()
 
-    # datax + spark tasks
+    # datax + spark tasks (platform tasks)
     datax_total = (await db.execute(select(func.count(DataXTask.id)))).scalar_one()
     spark_total = (await db.execute(select(func.count(SparkTask.id)))).scalar_one()
 
-    # today's executions
+    # 数据任务：调度任务中运行中的任务数 = Airflow 中未暂停的 DAG 数
+    airflow_dags = await list_airflow_dags(db, limit=100, offset=0)
+    running_tasks = sum(1 for d in airflow_dags if not d.get("is_paused"))
+    schedule_task_count = len(airflow_dags)
+
+    # 指标数：已发布指标
+    published_metrics_count = (await db.execute(
+        select(func.count(MetricDefinition.id))
+        .where(MetricDefinition.status.in_(["published", "active"]))
+    )).scalar_one()
+
+    # 数据接口：启用的数据服务 API 数
+    api_service_count = (await db.execute(
+        select(func.count(DataServiceApi.id))
+        .where(DataServiceApi.status == "active")
+    )).scalar_one()
+
+    # 今日执行：任务监控中今日（北京时间）运行的任务数
+    beijing_tz = timezone(timedelta(hours=8))
+    now_beijing = datetime.now(beijing_tz)
+    today_start_beijing = now_beijing.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_beijing.astimezone(timezone.utc)
     today_executions = (await db.execute(
-        select(func.count(TaskInstance.id)).where(TaskInstance.created_at >= today_start)
+        select(func.count(AirflowDagRun.id))
+        .where(AirflowDagRun.start_date >= today_start_utc)
     )).scalar_one()
 
     # today's queries
@@ -30,16 +56,16 @@ async def get_stats(db: AsyncSession) -> dict:
         select(func.count(QueryHistory.id)).where(QueryHistory.executed_at >= today_start)
     )).scalar_one()
 
-    # 7-day sync trend
+    # 7-day trend: 调度任务（Airflow DAG 运行）每日成功/失败，按北京时间归日
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     trend_result = await db.execute(
         select(
-            func.date_trunc("day", TaskInstance.created_at).label("day"),
-            func.count(TaskInstance.id).label("count"),
-            func.sum(case((TaskInstance.status == "success", 1), else_=0)).label("success"),
-            func.sum(case((TaskInstance.status == "failed", 1), else_=0)).label("failed"),
+            func.date_trunc("day", func.timezone("Asia/Shanghai", AirflowDagRun.start_date)).label("day"),
+            func.count(AirflowDagRun.id).label("count"),
+            func.sum(case((AirflowDagRun.state == "success", 1), else_=0)).label("success"),
+            func.sum(case((AirflowDagRun.state == "failed", 1), else_=0)).label("failed"),
         )
-        .where(TaskInstance.created_at >= seven_days_ago)
+        .where(AirflowDagRun.start_date >= seven_days_ago)
         .group_by("day")
         .order_by("day")
     )
@@ -53,6 +79,10 @@ async def get_stats(db: AsyncSession) -> dict:
     return {
         "total_datasources": ds_total,
         "total_datax_tasks": datax_total + spark_total,
+        "running_tasks": running_tasks,
+        "schedule_task_count": schedule_task_count,
+        "published_metrics_count": published_metrics_count,
+        "api_service_count": api_service_count,
         "today_executions": today_executions,
         "today_queries": today_queries,
         "trend": trend,
@@ -60,29 +90,24 @@ async def get_stats(db: AsyncSession) -> dict:
 
 
 async def get_recent_tasks(db: AsyncSession, limit: int = 10) -> list[dict]:
-    """Recent task executions."""
+    """Recent task executions (from Airflow DAG runs, same source as task monitor)."""
     result = await db.execute(
-        select(TaskInstance)
-        .order_by(TaskInstance.created_at.desc())
+        select(AirflowDagRun)
+        .order_by(AirflowDagRun.start_date.desc().nullslast())
         .limit(limit)
     )
-    tasks = result.scalars().all()
+    runs = result.scalars().all()
     return [
         {
-            "id": str(t.id),
-            "task_type": t.task_type,
-            "task_id": str(t.task_id),
-            "dag_id": t.dag_id,
-            "dag_run_id": t.dag_run_id,
-            "status": t.status,
-            "started_at": t.started_at.isoformat() if t.started_at else None,
-            "ended_at": t.ended_at.isoformat() if t.ended_at else None,
-            "duration_seconds": t.duration_seconds,
-            "rows_read": t.rows_read,
-            "rows_written": t.rows_written,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "dag_id": r.dag_id,
+            "dag_run_id": r.dag_run_id,
+            "run_type": r.run_type,
+            "state": r.state,
+            "start_date": r.start_date.isoformat() if r.start_date else None,
+            "end_date": r.end_date.isoformat() if r.end_date else None,
+            "duration_seconds": r.duration_seconds,
         }
-        for t in tasks
+        for r in runs
     ]
 
 

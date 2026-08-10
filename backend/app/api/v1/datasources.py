@@ -1,5 +1,8 @@
 """数据源接口: CRUD + 连接测试 + 表/字段查询。"""
+import uuid
+
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,16 +17,23 @@ from app.services import datasource_service
 router = APIRouter()
 
 
+class DatasourceQueryRequest(BaseModel):
+    """Read-only query against a configured data source."""
+    sql: str = Field(..., description="SQL语句(仅支持SELECT/SHOW/DESC/WITH)")
+    limit: int = Field(10000, ge=1, le=100000, description="最大返回行数")
+
+
 @router.get("", response_model=PageResponse[DataSourceResponse], summary="数据源列表")
 async def list_datasources(
     pagination: PaginationParams = Depends(),
     source_type: str | None = None,
     status: str | None = None,
+    keyword: str | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
     items, total = await datasource_service.list_datasources(
-        db, pagination.page, pagination.page_size, source_type, status
+        db, pagination.page, pagination.page_size, source_type, status, keyword
     )
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 
@@ -75,6 +85,19 @@ async def test_connection(datasource_id: str, db: AsyncSession = Depends(get_db)
     return ResponseOK(data=result)
 
 
+@router.post("/{datasource_id}/query", response_model=ResponseOK[dict], summary="执行数据源查询")
+async def query_datasource(
+    datasource_id: str,
+    req: DatasourceQueryRequest,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    result = await datasource_service.execute_query(
+        db, uuid.UUID(datasource_id), req.sql, req.limit
+    )
+    return ResponseOK(data=result)
+
+
 @router.get("/{datasource_id}/tables", response_model=ResponseOK[list[dict]], summary="获取表列表")
 async def list_tables(
     datasource_id: str,
@@ -83,6 +106,16 @@ async def list_tables(
     user=Depends(get_current_user),
 ):
     result = await datasource_service.list_tables(db, __import__("uuid").UUID(datasource_id), schema)
+    return ResponseOK(data=result)
+
+
+@router.get("/{datasource_id}/databases", response_model=ResponseOK[list[str]], summary="列出服务器上所有数据库")
+async def list_databases(
+    datasource_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    result = await datasource_service.list_databases(db, __import__("uuid").UUID(datasource_id))
     return ResponseOK(data=result)
 
 

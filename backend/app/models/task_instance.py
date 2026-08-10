@@ -24,6 +24,7 @@ class TaskInstance(Base):
     # status
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued", index=True)
     error_message: Mapped[str | None] = mapped_column(Text)
+    log_content: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     duration_seconds: Mapped[int | None] = mapped_column(Integer)

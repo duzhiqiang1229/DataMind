@@ -22,7 +22,7 @@ export const authApi = {
 // Data Source API
 // ============================================================
 export const datasourceApi = {
-  list(params: { page: number; page_size: number; source_type?: string }) {
+  list(params: { page: number; page_size: number; keyword?: string; source_type?: string; status?: string }) {
     return request.get("/datasources", { params });
   },
   create(data: any) {
@@ -34,8 +34,14 @@ export const datasourceApi = {
   delete(id: string) {
     return request.delete(`/datasources/${id}`);
   },
+  listDatabases(id: string) {
+    return request.get(`/datasources/${id}/databases`);
+  },
   testConnection(id: string) {
     return request.post(`/datasources/${id}/test`);
+  },
+  query(id: string, sql: string, limit: number) {
+    return request.post(`/datasources/${id}/query`, { sql, limit });
   },
   getTables(id: string, schema?: string) {
     return request.get(`/datasources/${id}/tables`, { params: { schema } });
@@ -121,7 +127,7 @@ export const sparkApi = {
 // Data Model API
 // ============================================================
 export const dataModelApi = {
-  list(params: { page: number; page_size: number; layer?: string; status?: string }) {
+  list(params: { page: number; page_size: number; keyword?: string; layer?: string; status?: string; business_domain?: string; data_domain?: string }) {
     return request.get("/data-models", { params });
   },
   create(data: any) {
@@ -133,11 +139,38 @@ export const dataModelApi = {
   update(id: string, data: any) {
     return request.put(`/data-models/${id}`, data);
   },
+  publish(id: string) {
+    return request.post(`/data-models/${id}/publish`);
+  },
   delete(id: string) {
     return request.delete(`/data-models/${id}`);
   },
   versions(id: string) {
     return request.get(`/data-models/${id}/versions`);
+  },
+  businessDomains() {
+    return request.get("/data-models/business-domains");
+  },
+  createBusinessDomain(data: any) {
+    return request.post("/data-models/business-domains", data);
+  },
+  updateBusinessDomain(id: string, data: any) {
+    return request.put(`/data-models/business-domains/${id}`, data);
+  },
+  deleteBusinessDomain(id: string) {
+    return request.delete(`/data-models/business-domains/${id}`);
+  },
+  dataDomains() {
+    return request.get("/data-models/data-domains");
+  },
+  createDataDomain(data: any) {
+    return request.post("/data-models/data-domains", data);
+  },
+  updateDataDomain(id: string, data: any) {
+    return request.put(`/data-models/data-domains/${id}`, data);
+  },
+  deleteDataDomain(id: string) {
+    return request.delete(`/data-models/data-domains/${id}`);
   },
 };
 
@@ -199,6 +232,15 @@ export const componentApi = {
   list(params: { page: number; page_size: number }) {
     return request.get("/components", { params });
   },
+  listAll() {
+    return request.get("/components/all");
+  },
+  getByCode(code: string) {
+    return request.get(`/components/by-code/${code}`);
+  },
+  upsertByCode(code: string, data: any) {
+    return request.put(`/components/by-code/${code}`, data);
+  },
   create(data: any) {
     return request.post("/components", data);
   },
@@ -241,6 +283,24 @@ export const roleApi = {
 };
 
 // ============================================================
+// Menu API
+// ============================================================
+export const menuApi = {
+  tree() {
+    return request.get("/menus/tree");
+  },
+  create(data: any) {
+    return request.post("/menus", data);
+  },
+  update(id: string, data: any) {
+    return request.put(`/menus/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/menus/${id}`);
+  },
+};
+
+// ============================================================
 // User API
 // ============================================================
 export const userApi = {
@@ -264,6 +324,9 @@ export const userApi = {
   },
   toggleStatus(id: string) {
     return request.post(`/users/${id}/toggle-status`);
+  },
+  assignRoles(id: string, role_ids: string[]) {
+    return request.put(`/users/${id}/roles`, { role_ids });
   },
 };
 
@@ -312,6 +375,51 @@ export const cubeApi = {
   },
   health() {
     return request.get("/cube/health");
+  },
+};
+
+// ============================================================
+// Cube Modeling API
+// ============================================================
+export const cubeModelApi = {
+  entities() {
+    return request.get("/cube-model/entities");
+  },
+  getCube(name: string) {
+    return request.get(`/cube-model/cubes/${name}`);
+  },
+  saveCube(data: any) {
+    return request.post("/cube-model/cubes", data);
+  },
+  deleteCube(name: string) {
+    return request.delete(`/cube-model/cubes/${name}`);
+  },
+  saveView(data: any) {
+    return request.post("/cube-model/views", data);
+  },
+  deleteView(name: string) {
+    return request.delete(`/cube-model/views/${name}`);
+  },
+  refresh() {
+    return request.post("/cube-model/refresh");
+  },
+};
+
+// ============================================================
+// Metric Definition API
+// ============================================================
+export const metricDefinitionApi = {
+  list(params: { page: number; page_size: number; keyword?: string; category_id?: string }) {
+    return request.get("/metric-definitions", { params });
+  },
+  create(data: any) {
+    return request.post("/metric-definitions", data);
+  },
+  update(id: string, data: any) {
+    return request.put(`/metric-definitions/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/metric-definitions/${id}`);
   },
 };
 
@@ -373,6 +481,15 @@ export const airflowApi = {
   getDag(dagId: string) {
     return request.get(`/airflow/${dagId}`);
   },
+  createDagFile(data: { script_name: string; content: string }) {
+    return request.post("/airflow/dag-files", data);
+  },
+  getDagFile(dagId: string) {
+    return request.get(`/airflow/${dagId}/file`);
+  },
+  updateDagFile(dagId: string, content: string) {
+    return request.put(`/airflow/${dagId}/file`, { content });
+  },
   pauseDag(dagId: string) {
     return request.post(`/airflow/${dagId}/pause`);
   },
@@ -394,6 +511,69 @@ export const airflowApi = {
   retryDagRun(dagId: string, runId: string, taskId: string) {
     return request.post(`/airflow/${dagId}/runs/${runId}/retry`, { task_id: taskId });
   },
+  deployDags() {
+    return request.post("/airflow/deploy-dags");
+  },
+  createDag(data: any) {
+    return request.post("/airflow/create-dag", data);
+  },
+  dagRuns(params: { page: number; page_size: number; dag_id?: string; status?: string }) {
+    return request.get("/airflow/dag-runs", { params });
+  },
+  syncRuns() {
+    return request.post("/airflow/sync-runs");
+  },
+};
+
+// ============================================================
+// DAG Workflow API (multi-task orchestration)
+// ============================================================
+export const dagWorkflowApi = {
+  list(params: { page: number; page_size: number }) {
+    return request.get("/dag-workflows", { params });
+  },
+  create(data: any) {
+    return request.post("/dag-workflows", data);
+  },
+  detail(id: string) {
+    return request.get(`/dag-workflows/${id}`);
+  },
+  update(id: string, data: any) {
+    return request.put(`/dag-workflows/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/dag-workflows/${id}`);
+  },
+  deploy(id: string) {
+    return request.post(`/dag-workflows/${id}/deploy`);
+  },
+};
+
+// ============================================================
+// ETL Script API (multi-language script development)
+// ============================================================
+export const etlScriptApi = {
+  list(params: { page: number; page_size: number; language?: string; keyword?: string }) {
+    return request.get("/etl-scripts", { params });
+  },
+  create(data: any) {
+    return request.post("/etl-scripts", data);
+  },
+  detail(id: string) {
+    return request.get(`/etl-scripts/${id}`);
+  },
+  update(id: string, data: any) {
+    return request.put(`/etl-scripts/${id}`, data);
+  },
+  delete(id: string) {
+    return request.delete(`/etl-scripts/${id}`);
+  },
+  execute(id: string, params: any) {
+    return request.post(`/etl-scripts/${id}/execute`, params);
+  },
+  deploySchedule(id: string) {
+    return request.post(`/etl-scripts/${id}/deploy-schedule`);
+  },
 };
 
 // ============================================================
@@ -409,6 +589,40 @@ export const dorisStorageApi = {
   partitions(database: string, table: string) {
     return request.get(`/doris-query/databases/${database}/tables/${table}/partitions`);
   },
+};
+
+// ============================================================
+// Metric Category API
+// ============================================================
+export const metricCategoryApi = {
+  list() { return request.get("/metric-categories"); },
+  create(data: any) { return request.post("/metric-categories", data); },
+  update(id: string, data: any) { return request.put(`/metric-categories/${id}`, data); },
+  delete(id: string) { return request.delete(`/metric-categories/${id}`); },
+  listMetrics(categoryId: string) { return request.get(`/metric-categories/${categoryId}/metrics`); },
+  assignMetric(categoryId: string, data: any) { return request.post(`/metric-categories/${categoryId}/metrics`, data); },
+  listUnmapped() { return request.get("/metric-categories/unmapped"); },
+};
+
+// ============================================================
+// Table Owner API
+// ============================================================
+export const tableOwnerApi = {
+  list(params: { page: number; page_size: number; database_name?: string }) { return request.get("/table-owners", { params }); },
+  setOwner(data: any) { return request.post("/table-owners", data); },
+  getOwner(database: string, table: string) { return request.get(`/table-owners/${database}/${table}`); },
+  removeOwner(database: string, table: string) { return request.delete(`/table-owners/${database}/${table}`); },
+};
+
+// ============================================================
+// Data Service Log API
+// ============================================================
+export const dataServiceLogApi = {
+  logs(apiId: string, params: { page: number; page_size: number }) { return request.get(`/data-services/${apiId}/logs`, { params }); },
+  callStats(days = 7) { return request.get("/data-services/call-stats", { params: { days } }); },
+  permissions(apiId: string) { return request.get(`/data-services/${apiId}/permissions`); },
+  assignPermission(apiId: string, data: any) { return request.post(`/data-services/${apiId}/permissions`, data); },
+  revokePermission(apiId: string, roleId: string) { return request.delete(`/data-services/${apiId}/permissions/${roleId}`); },
 };
 
 export { authApi as default };

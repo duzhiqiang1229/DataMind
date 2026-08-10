@@ -34,9 +34,9 @@
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }: { row: any }">
-            <el-button text type="primary" @click="handleTest(row)">测试</el-button>
-            <el-button text type="primary" @click="handleEdit(row)">编辑</el-button>
-            <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="success" @click="handleTest(row)">测试</el-button>
+            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -59,54 +59,69 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑 API' : '新增 API'"
-      width="700px"
+      width="900px"
       @close="resetForm"
     >
-      <el-form ref="formRef" :model="form" :rules="formRules" label-width="100px">
-        <el-form-item label="API 名称" prop="api_name">
-          <el-input v-model="form.api_name" placeholder="如 get_user_orders" />
-        </el-form-item>
-        <el-form-item label="路径" prop="api_path">
-          <el-input v-model="form.api_path" placeholder="如 /api/orders/users/{user_id}" />
-        </el-form-item>
-        <el-form-item label="请求方法" prop="method">
-          <el-select v-model="form.method" style="width: 200px;">
-            <el-option label="GET" value="GET" />
-            <el-option label="POST" value="POST" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="API 功能描述" />
-        </el-form-item>
-        <el-form-item label="数据库">
-          <el-input v-model="form.database" placeholder="如 analytics_db" />
-        </el-form-item>
-        <el-form-item label="SQL 模板" prop="sql_template">
-          <el-input
-            v-model="form.sql_template"
-            type="textarea"
-            :rows="5"
-            placeholder="SELECT * FROM orders WHERE user_id = {{user_id}} LIMIT {{limit}}"
-          />
-        </el-form-item>
-
-        <el-form-item label="参数列表">
-          <div class="param-list">
-            <div v-for="(param, index) in form.parameters" :key="index" class="param-row">
-              <el-input v-model="param.name" placeholder="参数名" style="width: 160px;" />
-              <el-select v-model="param.type" placeholder="类型" style="width: 130px;">
-                <el-option label="string" value="string" />
-                <el-option label="integer" value="integer" />
-                <el-option label="boolean" value="boolean" />
-                <el-option label="float" value="float" />
-                <el-option label="date" value="date" />
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="API 名称" prop="api_name">
+              <el-input v-model="form.api_name" placeholder="如 get_user_orders" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="请求方法" prop="method">
+              <el-select v-model="form.method" style="width: 100%;">
+                <el-option label="GET" value="GET" />
+                <el-option label="POST" value="POST" />
               </el-select>
-              <el-checkbox v-model="param.required">必填</el-checkbox>
-              <el-button text type="danger" :icon="Delete" @click="removeParam(index)" />
-            </div>
-            <el-button text type="primary" :icon="Plus" @click="addParam">添加参数</el-button>
-          </div>
-        </el-form-item>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="路径" prop="api_path">
+              <el-input v-model="form.api_path" placeholder="如 /api/orders/users/{user_id}" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="描述">
+              <el-input v-model="form.description" type="textarea" :rows="2" placeholder="API 功能描述" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="数据库">
+              <el-input v-model="form.database" placeholder="如 analytics_db" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="SQL 模板" prop="sql_template">
+              <el-input
+                v-model="form.sql_template"
+                type="textarea"
+                :rows="5"
+                placeholder="SELECT * FROM orders WHERE user_id = {{user_id}} LIMIT {{limit}}"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="参数列表">
+              <div class="param-list">
+                <div v-for="(param, index) in form.parameters" :key="index" class="param-row">
+                  <el-input v-model="param.name" placeholder="参数名" style="width: 160px;" />
+                  <el-select v-model="param.type" placeholder="类型" style="width: 130px;">
+                    <el-option label="string" value="string" />
+                    <el-option label="integer" value="integer" />
+                    <el-option label="boolean" value="boolean" />
+                    <el-option label="float" value="float" />
+                    <el-option label="date" value="date" />
+                  </el-select>
+                  <el-checkbox v-model="param.required">必填</el-checkbox>
+                  <el-button link type="danger" :icon="Delete" @click="removeParam(index)" />
+                </div>
+                <el-button link type="primary" :icon="Plus" @click="addParam">添加参数</el-button>
+              </div>
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
 
       <template #footer>
@@ -200,6 +215,7 @@ import { ref, reactive, onMounted } from "vue";
 import { Plus, Delete } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";
 import { dataServiceApi } from "@/api";
+import { formatDateTime } from "@/utils/format";
 
 interface ApiParameter {
   name: string;
@@ -263,18 +279,6 @@ async function fetchList() {
 
 function methodTagType(method: string): TagType {
   return method === "GET" ? "success" : "primary";
-}
-
-function formatDateTime(dateStr: string): string {
-  if (!dateStr) return "-";
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  } catch {
-    return dateStr;
-  }
 }
 
 // ---------- Create/Edit dialog ----------

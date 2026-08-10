@@ -7,20 +7,23 @@
       </div>
     </template>
 
-    <el-form :inline="true" class="search-form">
-      <el-form-item label="关键词">
-        <el-input v-model="searchKeyword" placeholder="用户名/姓名" clearable style="width: 180px;" @keyup.enter="loadData" />
-      </el-form-item>
-      <el-form-item label="状态">
-        <el-select v-model="searchStatus" placeholder="全部" clearable style="width: 100px;" @change="loadData">
-          <el-option label="启用" value="active" />
-          <el-option label="禁用" value="disabled" />
-        </el-select>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="loadData">查询</el-button>
-      </el-form-item>
-    </el-form>
+    <div class="search-bar">
+      <el-input
+        v-model="searchKeyword"
+        placeholder="用户名/姓名"
+        clearable
+        :prefix-icon="Search"
+        style="width: 200px;"
+        @keyup.enter="handleSearch"
+        @clear="handleSearch"
+      />
+      <el-select v-model="searchStatus" placeholder="状态" clearable style="width: 110px;" @change="handleSearch">
+        <el-option label="启用" value="active" />
+        <el-option label="禁用" value="disabled" />
+      </el-select>
+      <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
+      <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
+    </div>
 
     <el-table :data="tableData" v-loading="loading" border>
       <el-table-column prop="username" label="用户名" width="120" />
@@ -41,12 +44,12 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="last_login_at" label="最后登录" width="180" />
+      <el-table-column label="最后登录" width="180"><template #default="{ row }">{{ formatDateTime(row.last_login_at) }}</template></el-table-column>
       <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" @click="handleEdit(row)">编辑</el-button>
-          <el-button text type="primary" @click="handleResetPassword(row)">重置密码</el-button>
-          <el-button text type="warning" @click="handleToggleStatus(row)">
+          <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+          <el-button link type="info" @click="handleResetPassword(row)">重置密码</el-button>
+          <el-button link :type="row.status === 'active' ? 'warning' : 'success'" @click="handleToggleStatus(row)">
             {{ row.status === 'active' ? '禁用' : '启用' }}
           </el-button>
         </template>
@@ -66,28 +69,60 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑用户' : '新增用户'"
-      width="550px"
+      width="760px"
       @close="clearForm"
     >
-      <el-form ref="formRef" :model="form" :rules="formRules" label-width="80px">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="用户名" :disabled="isEdit" />
-        </el-form-item>
-        <el-form-item v-if="!isEdit" label="密码" prop="password">
-          <el-input v-model="form.password" type="password" show-password placeholder="密码" />
-        </el-form-item>
-        <el-form-item label="姓名">
-          <el-input v-model="form.full_name" placeholder="姓名" />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="form.email" placeholder="邮箱" />
-        </el-form-item>
-        <el-form-item label="手机">
-          <el-input v-model="form.phone" placeholder="手机号" />
-        </el-form-item>
-        <el-form-item label="部门">
-          <el-input v-model="form.department" placeholder="部门" />
-        </el-form-item>
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="70px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="用户名" prop="username">
+              <el-input v-model="form.username" placeholder="用户名" :disabled="isEdit" />
+            </el-form-item>
+          </el-col>
+          <el-col v-if="!isEdit" :span="12">
+            <el-form-item label="密码" prop="password">
+              <el-input v-model="form.password" type="password" show-password placeholder="密码" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="姓名">
+              <el-input v-model="form.full_name" placeholder="姓名" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="邮箱">
+              <el-input v-model="form.email" placeholder="邮箱" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="手机">
+              <el-input v-model="form.phone" placeholder="手机号" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="部门">
+              <el-input v-model="form.department" placeholder="部门" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="角色">
+              <el-select
+                v-model="form.role_ids"
+                multiple
+                filterable
+                placeholder="选择角色"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="role in roleOptions"
+                  :key="role.id"
+                  :label="role.role_name || role.name"
+                  :value="role.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -115,9 +150,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
-import { Plus } from "@element-plus/icons-vue";
+import { formatDateTime } from "@/utils/format";
+import { Plus, Search, RefreshLeft } from "@element-plus/icons-vue";
 import { ElMessage, type FormInstance } from "element-plus";
-import { userApi } from "@/api";
+import { userApi, roleApi } from "@/api";
 
 interface UserForm {
   username: string;
@@ -126,6 +162,7 @@ interface UserForm {
   email: string;
   phone: string;
   department: string;
+  role_ids: string[];
 }
 
 const loading = ref(false);
@@ -142,6 +179,7 @@ const formRef = ref<FormInstance>();
 
 const resetDialogVisible = ref(false);
 const resetForm = reactive({ username: "", user_id: "", new_password: "" });
+const roleOptions = ref<any[]>([]);
 
 const defaultForm: UserForm = {
   username: "",
@@ -150,6 +188,7 @@ const defaultForm: UserForm = {
   email: "",
   phone: "",
   department: "",
+  role_ids: [],
 };
 
 const form = reactive<UserForm>({ ...defaultForm });
@@ -177,6 +216,18 @@ async function loadData() {
   }
 }
 
+function handleSearch() {
+  pagination.page = 1;
+  loadData();
+}
+
+function handleReset() {
+  searchKeyword.value = "";
+  searchStatus.value = "";
+  pagination.page = 1;
+  loadData();
+}
+
 function handleAdd() {
   isEdit.value = false;
   Object.assign(form, defaultForm);
@@ -193,6 +244,7 @@ function handleEdit(row: any) {
     email: row.email || "",
     phone: row.phone || "",
     department: row.department || "",
+    role_ids: (row.roles || []).map((r: any) => r.id),
   });
   dialogVisible.value = true;
 }
@@ -211,6 +263,7 @@ async function handleSubmit() {
           department: form.department,
         };
         await userApi.update(editId.value, payload);
+        await userApi.assignRoles(editId.value, form.role_ids);
         ElMessage.success("更新成功");
       } else {
         await userApi.create(form);
@@ -262,7 +315,19 @@ function clearForm() {
   Object.assign(form, defaultForm);
 }
 
-onMounted(loadData);
+async function loadRoles() {
+  try {
+    const res = await roleApi.list();
+    roleOptions.value = res || [];
+  } catch {
+    // handled
+  }
+}
+
+onMounted(() => {
+  loadData();
+  loadRoles();
+});
 </script>
 
 <style lang="scss" scoped>

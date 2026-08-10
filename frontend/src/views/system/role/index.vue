@@ -20,24 +20,32 @@
       </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" @click="handleEdit(row)">编辑</el-button>
-          <el-button text type="primary" @click="handlePermissions(row)">权限</el-button>
-          <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
+          <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+          <el-button link type="info" @click="handlePermissions(row)">权限</el-button>
+          <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑角色' : '新增角色'" width="500px" @close="clearForm">
-      <el-form ref="formRef" :model="form" :rules="formRules" label-width="80px">
-        <el-form-item label="编码" prop="role_code">
-          <el-input v-model="form.role_code" placeholder="如 data_engineer" :disabled="isEdit" />
-        </el-form-item>
-        <el-form-item label="名称" prop="role_name">
-          <el-input v-model="form.role_name" placeholder="角色名称" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="角色描述" />
-        </el-form-item>
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑角色' : '新增角色'" width="760px" @close="clearForm">
+      <el-form ref="formRef" :model="form" :rules="formRules" label-width="70px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="编码" prop="role_code">
+              <el-input v-model="form.role_code" placeholder="如 data_engineer" :disabled="isEdit" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="名称" prop="role_name">
+              <el-input v-model="form.role_name" placeholder="角色名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="描述">
+              <el-input v-model="form.description" type="textarea" :rows="2" placeholder="角色描述" />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>

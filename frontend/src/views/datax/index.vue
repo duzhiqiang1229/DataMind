@@ -4,7 +4,7 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span class="header-title">DataX 同步任务</span>
+      <span class="header-title">数据集成</span>
           <el-button type="primary" :icon="Plus" @click="handleAdd">新建同步任务</el-button>
         </div>
       </template>
@@ -28,17 +28,15 @@
 
       <el-table :data="tableData" v-loading="loading" border stripe style="width: 100%">
         <el-table-column prop="task_name" label="任务名称" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="task_code" label="编码" width="180" show-overflow-tooltip />
-        <el-table-column prop="source_datasource_name" label="数据源" width="140" show-overflow-tooltip>
-          <template #default="{ row }">
-            {{ datasourceLabel(row.source_datasource_id) }}
-          </template>
+        <el-table-column label="源表" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ sourceTableLabel(row) }}</template>
         </el-table-column>
-        <el-table-column prop="source_table" label="源表" width="140" show-overflow-tooltip />
-        <el-table-column prop="target_table" label="目标表" width="140" show-overflow-tooltip />
+        <el-table-column label="目标表" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.target_database }}.{{ row.target_table }}</template>
+        </el-table-column>
         <el-table-column prop="sync_mode" label="模式" width="90" align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.sync_mode === 'incremental' ? 'warning' : 'info'">
+            <el-tag size="small" :type="row.sync_mode === 'incremental' ? 'warning' : 'primary'">
               {{ row.sync_mode === 'incremental' ? '增量' : '全量' }}
             </el-tag>
           </template>
@@ -48,12 +46,15 @@
             <el-tag size="small" :type="statusTag(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" :icon="VideoPlay" @click="handleTrigger(row)">执行</el-button>
-            <el-button text type="primary" :icon="Clock" @click="handleHistory(row)">历史</el-button>
-            <el-button text type="primary" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-            <el-button text type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
+            <el-button link type="primary" :icon="VideoPlay" @click="handleTrigger(row)">执行</el-button>
+            <el-button link type="primary" :icon="Clock" @click="handleHistory(row)">历史</el-button>
+            <el-button v-if="row.status === 'draft'" link type="primary" @click="handleToggleStatus(row, 'enable')">启用</el-button>
+            <el-button v-if="row.status === 'active'" link type="warning" @click="handleToggleStatus(row, 'pause')">暂停</el-button>
+            <el-button v-if="row.status === 'paused'" link type="success" @click="handleToggleStatus(row, 'resume')">恢复</el-button>
+            <el-button link type="primary" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -183,7 +184,7 @@
             </el-table-column>
             <el-table-column label="操作" width="80" align="center">
               <template #default="{ $index }">
-                <el-button text type="danger" size="small" @click="removeMapping($index)">移除</el-button>
+                <el-button link type="danger" size="small" @click="removeMapping($index)">移除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -274,7 +275,7 @@
             <el-descriptions-item label="目标库">{{ form.target_database || '-' }}</el-descriptions-item>
             <el-descriptions-item label="目标表">{{ form.target_table || '-' }}</el-descriptions-item>
             <el-descriptions-item label="同步模式">
-              <el-tag size="small" :type="form.sync_mode === 'incremental' ? 'warning' : 'info'">
+              <el-tag size="small" :type="form.sync_mode === 'incremental' ? 'warning' : 'primary'">
                 {{ form.sync_mode === 'incremental' ? '增量' : '全量' }}
               </el-tag>
             </el-descriptions-item>
@@ -331,20 +332,22 @@
         <el-button :icon="Refresh" size="small" @click="loadHistory">刷新</el-button>
       </div>
       <el-table :data="historyData" v-loading="historyLoading" border size="small" style="width: 100%">
-        <el-table-column prop="dag_run_id" label="执行ID" width="180" show-overflow-tooltip />
+        <el-table-column label="执行ID" width="230" show-overflow-tooltip>
+          <template #default="{ row, $index }">{{ formatRunId(row, $index) }}</template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="instanceStatusTag(row.status)" size="small">{{ instanceStatusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="started_at" label="开始时间" width="170" />
-        <el-table-column prop="ended_at" label="结束时间" width="170" />
+        <el-table-column label="开始时间" width="170"><template #default="{ row }">{{ formatDateTime(row.started_at) }}</template></el-table-column>
+        <el-table-column label="结束时间" width="170"><template #default="{ row }">{{ formatDateTime(row.ended_at) }}</template></el-table-column>
         <el-table-column prop="duration_seconds" label="耗时(秒)" width="100" align="right" />
         <el-table-column prop="rows_read" label="读取行数" width="100" align="right" />
         <el-table-column prop="rows_written" label="写入行数" width="100" align="right" />
         <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="handleViewLog(row)">日志</el-button>
+            <el-button link type="primary" size="small" @click="handleViewLog(row)">日志</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -367,6 +370,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from "vue";
+import { formatDateTime } from "@/utils/format";
 import {
   Plus,
   Edit,
@@ -456,7 +460,6 @@ const form = reactive<TaskForm>({ ...defaultForm });
 
 const step1Rules = {
   task_name: [{ required: true, message: "请输入任务名称", trigger: "blur" }],
-  task_code: [{ required: true, message: "请输入任务编码", trigger: "blur" }],
   source_datasource_id: [{ required: true, message: "请选择数据源", trigger: "change" }],
   source_table: [{ required: true, message: "请输入源表名", trigger: "blur" }],
 };
@@ -515,6 +518,19 @@ async function loadDatasourceOptions() {
 function datasourceLabel(id: string): string {
   const ds = datasourceOptions.value.find((d) => d.id === id);
   return ds ? `${ds.source_name} (${ds.source_type})` : id || "-";
+}
+
+function sourceTableLabel(row: any): string {
+  const ds = datasourceOptions.value.find((d) => d.id === row.source_datasource_id);
+  const db = ds?.database_name || "";
+  return db ? `${db}.${row.source_table}` : row.source_table;
+}
+
+function formatRunId(row: any, index: number): string {
+  // 任务名 + 8位数字日期 + 两位数字编号，如：测试同步_20260807_01
+  const dateStr = formatDateTime(row.created_at || row.started_at).slice(0, 10).replace(/-/g, "");
+  const num = String(index + 1).padStart(2, "0");
+  return `${currentTaskName.value}_${dateStr}_${num}`;
 }
 
 // ===================== Column Loading =====================
@@ -695,6 +711,24 @@ async function handleTrigger(row: any) {
   try {
     const res = await dataxApi.trigger(row.id);
     ElMessage.success(`任务已触发，执行ID: ${res.dag_run_id}`);
+    loadData();
+  } catch {
+    // handled
+  }
+}
+
+async function handleToggleStatus(row: any, action: string) {
+  try {
+    if (action === "pause") {
+      await dataxApi.pause(row.id);
+      ElMessage.success(`任务 "${row.task_name}" 已暂停`);
+    } else if (action === "resume") {
+      await dataxApi.resume(row.id);
+      ElMessage.success(`任务 "${row.task_name}" 已恢复`);
+    } else {
+      await dataxApi.update(row.id, { status: "active" });
+      ElMessage.success(`任务 "${row.task_name}" 已启用`);
+    }
     loadData();
   } catch {
     // handled

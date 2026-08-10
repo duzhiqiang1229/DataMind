@@ -62,18 +62,25 @@ def execute_datax_sync(**context):
     if not job_json:
         raise ValueError("Missing job_json in DAG run conf")
 
-    # 1. 将 job_json 写入临时文件
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, prefix="datax_job_"
-    ) as f:
-        json.dump(job_json, f, ensure_ascii=False)
-        job_file_path = f.name
+    # 1. 优先使用发布时写入临时目录的 job 文件；否则回退为本次运行临时生成
+    job_file_path = conf.get("job_file", "")
+    if job_file_path and os.path.exists(job_file_path):
+        print(f"[DataX] Use published job file: {job_file_path}")
+    else:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, prefix="datax_job_"
+        ) as f:
+            json.dump(job_json, f, ensure_ascii=False)
+            job_file_path = f.name
+        print(f"[DataX] Job file created: {job_file_path}")
 
-    print(f"[DataX] Job file created: {job_file_path}")
-    print(f"[DataX] Source -> Target: {job_json.get('job', {}).get('content', [{}])[0].get('reader', {}).get('parameter', {}).get('connection', [{}])[0].get('table', ['?'])[0]} -> {job_json.get('job', {}).get('content', [{}])[0].get('writer', {}).get('parameter', {}).get('connection', {}).get('table', '?')}")
+    content0 = job_json.get("job", {}).get("content", [{}])[0]
+    reader_table = content0.get("reader", {}).get("parameter", {}).get("connection", [{}])[0].get("table", ["?"])[0]
+    writer_table = content0.get("writer", {}).get("parameter", {}).get("connection", [{}])[0].get("table", ["?"])[0]
+    print(f"[DataX] Source -> Target: {reader_table} -> {writer_table}")
 
     # 2. 执行 datax.py
-    datax_home = os.environ.get("DATAX_HOME", "/opt/datax")
+    datax_home = os.environ.get("DATAX_HOME", "/home/datax")
     datax_cmd = [f"{datax_home}/bin/datax.py", job_file_path]
 
     print(f"[DataX] Executing: {' '.join(datax_cmd)}")
@@ -111,28 +118,20 @@ def execute_datax_sync(**context):
 
 
 def _parse_datax_stats(stdout: str) -> dict:
-    """从 DataX 输出中解析统计信息。"""
+    """Parse sync statistics from DataX output."""
+    import re
     stats = {"rows_read": 0, "rows_written": 0, "bytes_written": 0}
 
-    for line in stdout.split("\n"):
-        if "读出记录数" in line or "Total Read" in line:
-            # 尝试提取数字
-            import re
-            nums = re.findall(r"[\d,]+", line)
-            if nums:
-                stats["rows_read"] = int(nums[0].replace(",", ""))
+    # Progress line: "Total 15 records, 156 bytes"
+    m = re.search(r"Total (\d+) records,\s*(\d+) bytes", stdout)
+    if m:
+        stats["rows_read"] = int(m.group(1))
+        stats["bytes_written"] = int(m.group(2))
 
-        if "写入记录数" in line or "Total Write" in line:
-            import re
-            nums = re.findall(r"[\d,]+", line)
-            if nums:
-                stats["rows_written"] = int(nums[0].replace(",", ""))
-
-        if "写入字节" in line or "Total Write Bytes" in line:
-            import re
-            nums = re.findall(r"[\d,]+", line)
-            if nums:
-                stats["bytes_written"] = int(nums[0].replace(",", ""))
+    # Doris StreamLoad response includes loaded rows
+    m = re.search(r'"NumberLoadedRows"\s*:\s*(\d+)', stdout)
+    if m:
+        stats["rows_written"] = int(m.group(1))
 
     return stats
 

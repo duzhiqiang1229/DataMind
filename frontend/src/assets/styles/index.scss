@@ -85,6 +85,30 @@ a {
   .el-table__row:hover > td.el-table__cell {
     background: #f8fafc !important;
   }
+
+  /* Table action buttons: plain text, no background in any state */
+  .el-button.is-text,
+  .el-button.is-link {
+    padding: 0;
+    background-color: transparent !important;
+    border-color: transparent !important;
+
+    &:hover,
+    &:focus,
+    &.is-loading {
+      background-color: transparent !important;
+      border-color: transparent !important;
+    }
+  }
+}
+
+/* Unified search bar (used by list pages) */
+.search-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 /* Button */
@@ -93,7 +117,7 @@ a {
   font-weight: 500;
   transition: $transition-base;
 
-  &--primary {
+  &--primary:not(.is-link):not(.is-text) {
     background: $primary-color !important;
     border-color: $primary-color !important;
 

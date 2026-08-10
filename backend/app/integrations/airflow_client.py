@@ -25,7 +25,10 @@ class AirflowClient(ComponentAdapter):
     async def health_check(self) -> bool:
         try:
             resp = await self._request("GET", "/api/v1/health")
-            return resp.json().get("status") == "healthy"
+            # Airflow health payload:
+            # {"metadatabase": {"status": "healthy"}, "scheduler": {"status": "running"}, ...}
+            data = resp.json()
+            return data.get("metadatabase", {}).get("status") == "healthy"
         except Exception:
             return False
 
@@ -94,12 +97,13 @@ class AirflowClient(ComponentAdapter):
         return info.get("state", "unknown")
 
     async def list_dag_runs(
-        self, dag_id: str, limit: int = 50, offset: int = 0
+        self, dag_id: str, limit: int = 50, offset: int = 0,
+        order_by: str = "-start_date",
     ) -> list[dict]:
-        """List recent DAG runs for a DAG."""
+        """List DAG runs for a DAG, newest first by default."""
         resp = await self._request(
             "GET", f"/api/v1/dags/{dag_id}/dagRuns",
-            params={"limit": limit, "offset": offset},
+            params={"limit": limit, "offset": offset, "order_by": order_by},
         )
         return resp.json().get("dag_runs", [])
 
@@ -122,6 +126,16 @@ class AirflowClient(ComponentAdapter):
             headers={"Accept": "text/plain"},
         )
         return resp.text
+
+    async def get_xcom(
+        self, dag_id: str, run_id: str, task_id: str, key: str
+    ) -> Any:
+        """Fetch an XCom value pushed by a task instance."""
+        resp = await self._request(
+            "GET",
+            f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}/xcomEntries/{key}",
+        )
+        return resp.json().get("value")
 
     # --- Cleanup ---
 

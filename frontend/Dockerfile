@@ -5,7 +5,7 @@ WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci --silent
 COPY . .
-RUN npm run build
+RUN npx vite build
 
 # Stage 2: Nginx serving static files
 FROM nginx:alpine

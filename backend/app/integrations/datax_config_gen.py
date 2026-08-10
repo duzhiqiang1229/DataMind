@@ -118,6 +118,7 @@ class DataXConfigGenerator:
                         self._build_jdbc_url(source_type, source_config)
                     ],
                     "table": [source_config["table"]],
+                    "selectedDatabase": source_config.get("database", ""),
                 }],
                 "column": source_columns,
             },
@@ -136,14 +137,17 @@ class DataXConfigGenerator:
                 "username": target_config["username"],
                 "password": target_config["password"],
                 "column": target_columns,
-                "connection": {
+                "connection": [{
                     "jdbcUrl": self._build_jdbc_url(target_type, target_config),
-                    "database": target_config["database"],
-                    "table": target_config["table"],
-                },
+                    "selectedDatabase": target_config["database"],
+                    "table": [target_config["table"]],
+                }],
+                "loadUrl": [
+                    f"{target_config['host']}:{target_config.get('http_port', 8030)}"
+                ],
                 "loadProps": options.get("load_props", {
                     "format": "json",
-                    "strip_external": "true",
+                    "strip_outer_array": "true",
                 }),
             },
         }

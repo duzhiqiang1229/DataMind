@@ -1,4 +1,7 @@
 """DataX task service: CRUD + config generation + trigger + pause/resume + instances."""
+import asyncio
+import re
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -51,6 +54,9 @@ async def create_task(
     db: AsyncSession, req: DataXTaskCreate, user_id: uuid.UUID
 ) -> dict:
     """Create DataX task + field mappings + generate job JSON."""
+    # Auto-generate a unique task code if not provided
+    task_code = req.task_code or f"{req.source_table}_sync_{uuid.uuid4().hex[:6]}"
+
     # load data source for config generation
     ds_result = await db.execute(
         select(DataSource).where(DataSource.id == uuid.UUID(req.source_datasource_id))
@@ -72,15 +78,10 @@ async def create_task(
         "split_pk": req.split_pk or "",
     }
 
-    # build target config (Doris) — load from component_configs
-    from app.services.component_service import get_doris_client
-    doris = await get_doris_client(db)
+    # build target config (Doris) ? from data source management
+    doris = await _get_doris_target(db)
     target_config = {
-        "type": "doris",
-        "host": doris.mysql_host,
-        "port": doris.mysql_port,
-        "username": doris.username,
-        "password": doris.password,
+        **doris,
         "database": req.target_database,
         "table": req.target_table,
     }
@@ -101,7 +102,7 @@ async def create_task(
     # save task
     task = DataXTask(
         task_name=req.task_name,
-        task_code=req.task_code,
+        task_code=task_code,
         source_datasource_id=uuid.UUID(req.source_datasource_id),
         source_table=req.source_table,
         source_schema=req.source_schema,
@@ -136,6 +137,10 @@ async def create_task(
 
     await db.commit()
     await db.refresh(task)
+    try:
+        await _write_job_file(db, task)
+    except Exception as e:
+        logger.warning(f"[datax] write job file failed after create: {e}")
     return _to_dict(task)
 
 
@@ -193,8 +198,7 @@ async def update_task(
         # regenerate job JSON
         ds_result = await db.execute(select(DataSource).where(DataSource.id == task.source_datasource_id))
         ds = ds_result.scalar_one()
-        from app.services.component_service import get_doris_client
-        doris = await get_doris_client(db)
+        doris = await _get_doris_target(db)
 
         source_config = {
             "type": ds.source_type, "host": ds.host, "port": ds.port,
@@ -203,9 +207,9 @@ async def update_task(
             "where": task.where_clause or "", "split_pk": task.split_pk or "",
         }
         target_config = {
-            "type": "doris", "host": doris.mysql_host, "port": doris.mysql_port,
-            "username": doris.username, "password": doris.password,
-            "database": task.target_database, "table": task.target_table,
+            **doris,
+            "database": task.target_database,
+            "table": task.target_table,
         }
         column_mapping = [m.model_dump() for m in req.field_mappings]
         options = {"channel": task.channel, "error_limit_record": task.error_limit_record, "error_limit_percentage": float(task.error_limit_pct)}
@@ -213,6 +217,10 @@ async def update_task(
 
     await db.commit()
     await db.refresh(task)
+    try:
+        await _write_job_file(db, task)
+    except Exception as e:
+        logger.warning(f"[datax] write job file failed after update: {e}")
     return _to_dict(task)
 
 
@@ -221,6 +229,24 @@ async def delete_task(db: AsyncSession, task_id: uuid.UUID) -> bool:
     task = result.scalar_one_or_none()
     if not task:
         return False
+    try:
+        import paramiko
+        ssh_cfg = await _datax_ssh_config(db)
+        if ssh_cfg["password"]:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(
+                ssh_cfg["host"], port=ssh_cfg["port"],
+                username=ssh_cfg["user"], password=ssh_cfg["password"], timeout=15,
+            )
+            with client.open_sftp() as sftp:
+                try:
+                    sftp.remove(f"{ssh_cfg['temp_dir']}/{task.task_code}.json")
+                except FileNotFoundError:
+                    pass
+            client.close()
+    except Exception:
+        pass
     await db.delete(task)
     await db.commit()
     return True
@@ -237,32 +263,22 @@ async def trigger_task(
     if not task:
         raise ValueError("Task not found")
 
-    dag_id = "datax_sync"
-    run_config = {
-        "task_id": str(task.id),
-        "task_code": task.task_code,
-        "job_json": task.job_config,
-        **(conf or {}),
-    }
-
-    # trigger via Airflow
-    airflow = await get_airflow_client(db)
-    run_result = await airflow.trigger_dag_run(dag_id, conf=run_config)
-    dag_run_id = run_result.get("dag_run_id", "")
-
-    # create task instance
+    dag_id = "datax_direct"
+    dag_run_id = f"direct_{uuid.uuid4().hex[:12]}"
     instance = TaskInstance(
         task_type="datax",
         task_id=task.id,
         dag_id=dag_id,
         dag_run_id=dag_run_id,
-        run_config=run_config,
+        run_config={"task_id": str(task.id), "task_code": task.task_code, **(conf or {})},
         status="queued",
         triggered_by=user_id,
     )
     db.add(instance)
     await db.commit()
     await db.refresh(instance)
+    # 后台直接执行（不经 Airflow）
+    asyncio.create_task(_run_datax_direct(task.id, instance.id))
     return _instance_to_dict(instance)
 
 
@@ -276,6 +292,7 @@ async def pause_task(db: AsyncSession, task_id: uuid.UUID) -> bool:
         airflow = await get_airflow_client(db)
         await airflow.patch_dag(task.dag_id, is_paused=True)
     task.is_paused = True
+    task.status = "paused"
     await db.commit()
     return True
 
@@ -290,6 +307,7 @@ async def resume_task(db: AsyncSession, task_id: uuid.UUID) -> bool:
         airflow = await get_airflow_client(db)
         await airflow.patch_dag(task.dag_id, is_paused=False)
     task.is_paused = False
+    task.status = "active"
     await db.commit()
     return True
 
@@ -315,19 +333,20 @@ async def get_instance_status(db: AsyncSession, instance_id: uuid.UUID) -> dict 
     if not inst:
         return None
 
-    # optionally poll Airflow for latest status
-    try:
-        airflow = await get_airflow_client(db)
-        state = await airflow.get_dag_run_state(inst.dag_id, inst.dag_run_id)
-        if state != inst.status:
-            await db.execute(
-                update(TaskInstance).where(TaskInstance.id == inst.id)
-                .values(status=state, ended_at=datetime.now(timezone.utc) if state in ("success", "failed") else None)
-            )
-            await db.commit()
-            await db.refresh(inst)
-    except Exception as e:
-        logger.warning(f"Failed to poll instance {instance_id}: {e}")
+    if inst.dag_id != "datax_direct":
+        # Airflow 执行的实例：轮询 Airflow 获取最新状态
+        try:
+            airflow = await get_airflow_client(db)
+            state = await airflow.get_dag_run_state(inst.dag_id, inst.dag_run_id)
+            if state != inst.status:
+                await db.execute(
+                    update(TaskInstance).where(TaskInstance.id == inst.id)
+                    .values(status=state, ended_at=datetime.now(timezone.utc) if state in ("success", "failed") else None)
+                )
+                await db.commit()
+                await db.refresh(inst)
+        except Exception as e:
+            logger.warning(f"Failed to poll instance {instance_id}: {e}")
 
     return _instance_to_dict(inst)
 
@@ -340,8 +359,11 @@ async def get_instance_log(
     if not inst:
         return None
 
-    airflow = await get_airflow_client(db)
-    log_content = await airflow.get_task_log(inst.dag_id, inst.dag_run_id, task_name, try_number)
+    if inst.dag_id == "datax_direct":
+        log_content = inst.log_content or "暂无日志内容"
+    else:
+        airflow = await get_airflow_client(db)
+        log_content = await airflow.get_task_log(inst.dag_id, inst.dag_run_id, task_name, try_number)
 
     return {
         "task_instance_id": str(inst.id),
@@ -406,3 +428,167 @@ def _instance_to_dict(i: TaskInstance) -> dict:
         "triggered_by": str(i.triggered_by) if i.triggered_by else None,
         "created_at": i.created_at.isoformat() if i.created_at else None,
     }
+
+
+async def _get_doris_target(db: AsyncSession) -> dict:
+    """Get Doris target connection from data source management."""
+    from app.core.security import decrypt_value
+    from app.models import DataSource
+
+    result = await db.execute(
+        select(DataSource).where(
+            DataSource.source_type == "doris",
+            DataSource.status == "active",
+        )
+    )
+    ds = result.scalars().first()
+    if not ds:
+        raise ValueError("??? Doris ??????????????")
+    return {
+        "type": "doris",
+        "host": ds.host,
+        "port": ds.port,
+        "username": ds.username,
+        "password": decrypt_value(ds.password_encrypted),
+    }
+
+
+async def _write_job_file(db: AsyncSession, task: DataXTask) -> str:
+    """Write the task job JSON into the DataX temp directory on the server.
+
+    The temp directory comes from the DataX component config (temp_dir);
+    the server is reached with the Airflow component's SSH settings (same host).
+    Returns the remote file path, or "" on missing config.
+    """
+    import json as _json
+    import paramiko
+
+    ssh_cfg = await _datax_ssh_config(db)
+    temp_dir = ssh_cfg["temp_dir"]
+    if not ssh_cfg["password"]:
+        return ""
+
+    remote_file = f"{temp_dir}/{task.task_code}.json"
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        ssh_cfg["host"], port=ssh_cfg["port"],
+        username=ssh_cfg["user"], password=ssh_cfg["password"], timeout=15,
+    )
+    try:
+        _, _, _ = client.exec_command(f"mkdir -p {temp_dir}", timeout=15)
+        with client.open_sftp() as sftp:
+            with sftp.open(remote_file, "w") as f:
+                f.write(_json.dumps(task.job_config, ensure_ascii=False, indent=2).encode("utf-8"))
+    finally:
+        client.close()
+    logger.info(f"[datax] job file written: {remote_file}")
+    return remote_file
+
+
+async def _datax_ssh_config(db: AsyncSession) -> dict:
+    """SSH connection config for the DataX server.
+
+    Prefers the DataX component's own SSH fields, falls back to the Airflow
+    component's SSH settings (same server), then to defaults.
+    """
+    from app.services.component_service import _load_config
+
+    datax_cfg = await _load_config(db, "datax") or {}
+    airflow_cfg = await _load_config(db, "airflow") or {}
+    return {
+        "host": datax_cfg.get("ssh_host") or airflow_cfg.get("ssh_host") or "192.168.1.4",
+        "port": int(datax_cfg.get("ssh_port") or airflow_cfg.get("ssh_port") or 22),
+        "user": datax_cfg.get("ssh_user") or airflow_cfg.get("ssh_user") or "root",
+        "password": datax_cfg.get("ssh_password") or airflow_cfg.get("ssh_password") or "",
+        "datax_home": datax_cfg.get("datax_home") or "/home/datax",
+        "temp_dir": (datax_cfg.get("temp_dir") or "/tmp/datax").rstrip("/"),
+    }
+
+
+def _parse_datax_stats(stdout: str) -> dict:
+    """Parse sync statistics from DataX output."""
+    stats = {"rows_read": 0, "rows_written": 0, "bytes_written": 0}
+    m = re.search(r"Total (\d+) records,\s*(\d+) bytes", stdout or "")
+    if m:
+        stats["rows_read"] = int(m.group(1))
+        stats["bytes_written"] = int(m.group(2))
+    m = re.search(r'"NumberLoadedRows"\s*:\s*(\d+)', stdout or "")
+    if m:
+        stats["rows_written"] = int(m.group(1))
+    return stats
+
+
+def _ssh_exec_datax(ssh_cfg: dict, job_file: str) -> tuple[int, str, str]:
+    """Run datax.py on the remote server synchronously (call in a thread)."""
+    import paramiko
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(
+        ssh_cfg["host"], port=ssh_cfg["port"],
+        username=ssh_cfg["user"], password=ssh_cfg["password"], timeout=15,
+    )
+    datax_home = ssh_cfg.get("datax_home") or "/home/datax"
+    cmd = f"python {datax_home}/bin/datax.py {job_file}"
+    try:
+        _, stdout, stderr = client.exec_command(cmd, timeout=3600)
+        out = stdout.read().decode("utf-8", errors="replace")
+        err = stderr.read().decode("utf-8", errors="replace")
+        code = stdout.channel.recv_exit_status()
+    finally:
+        client.close()
+    return code, out, err
+
+
+async def _run_datax_direct(task_id: uuid.UUID, instance_id: uuid.UUID) -> None:
+    """Background direct DataX execution (no Airflow DAG)."""
+    from app.core.database import async_session
+    from app.services.component_service import _load_config
+
+    async with async_session() as db:
+        task = (await db.execute(select(DataXTask).where(DataXTask.id == task_id))).scalar_one_or_none()
+        inst = (await db.execute(select(TaskInstance).where(TaskInstance.id == instance_id))).scalar_one_or_none()
+        if not task or not inst:
+            return
+
+        started = datetime.now(timezone.utc)
+        inst.status = "running"
+        inst.started_at = started
+        await db.commit()
+
+        try:
+            job_file = await _write_job_file(db, task)
+            if not job_file:
+                raise RuntimeError("未配置 SSH 密码，无法写入 job 文件")
+
+            ssh_cfg = await _datax_ssh_config(db)
+            if not ssh_cfg["password"]:
+                raise RuntimeError("未配置 SSH 密码")
+
+            code, out, err = await asyncio.wait_for(
+                asyncio.to_thread(_ssh_exec_datax, ssh_cfg, job_file),
+                timeout=3600,
+            )
+            ended = datetime.now(timezone.utc)
+            stats = _parse_datax_stats(out)
+            inst.rows_read = stats["rows_read"] or inst.rows_read
+            inst.rows_written = stats["rows_written"] or inst.rows_written
+            inst.bytes_written = stats["bytes_written"] or inst.bytes_written
+            inst.ended_at = ended
+            inst.duration_seconds = int((ended - started).total_seconds())
+            inst.log_content = (out or "") + (("\n[STDERR]\n" + err) if err else "")
+            if code == 0:
+                inst.status = "success"
+            else:
+                inst.status = "failed"
+                inst.error_message = (err or out)[-500:]
+        except asyncio.TimeoutError:
+            inst.status = "failed"
+            inst.ended_at = datetime.now(timezone.utc)
+            inst.error_message = "DataX 执行超时（超过 1 小时）"
+        except Exception as e:
+            inst.status = "failed"
+            inst.ended_at = datetime.now(timezone.utc)
+            inst.error_message = str(e)[-500:]
+        await db.commit()

@@ -3,10 +3,13 @@
 # Builds frontend, serves via Nginx, runs backend via uvicorn
 # Usage: docker-compose -f docker-compose.prod.yml up -d
 # ============================================================
+name: datamind
+
 services:
   # PostgreSQL - platform database
   postgres:
-    image: postgres:16-alpine
+    # Keep 15 to match existing data volume (upgrade later via pg_upgrade)
+    image: postgres:15
     container_name: datamind-postgres
     restart: unless-stopped
     environment:
@@ -17,6 +20,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database/001_init_schema.sql:/docker-entrypoint-initdb.d/001_init_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U datamind"]
       interval: 10s
@@ -55,10 +59,17 @@ services:
       - REDIS_PORT=6379
       - APP_DEBUG=false
       - APP_ENV=production
+      - DATAMIND_IN_DOCKER=true
+      - CUBE_COMPOSE_DIR=/datamind
+      - CUBE_MODEL_CUBES_DIR=/datamind/cube/model/cubes
+      - CUBE_MODEL_VIEWS_DIR=/datamind/cube/model/views
+      - AIRFLOW_DAGS_DIR=/opt/airflow/dags
     ports:
       - "8000:8000"
     volumes:
       - ./airflow-dags:/opt/airflow/dags
+      - ./cube:/datamind/cube
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,9 +88,35 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "5173:80"
     depends_on:
       - backend
+
+  # Cube 语义层（模型文件挂载自 ./cube/model）
+  cube:
+    image: cubejs/cube:latest
+    container_name: datamind-cube
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./cube/.env
+    volumes:
+      - ./cube/model:/cube/conf/model
+
+  # DataX 执行容器（后端通过 docker CLI 动态调用）
+  datax:
+    build:
+      context: ./datax
+      dockerfile: Dockerfile
+    image: datamind-datax:latest
+    container_name: datamind-datax
+    restart: unless-stopped
+    command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - datax_jobs:/jobs
 
 volumes:
   postgres_data:
   redis_data:
+  datax_jobs:

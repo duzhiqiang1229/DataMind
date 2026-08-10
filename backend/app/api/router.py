@@ -19,6 +19,13 @@ from app.api.v1 import (
     openmetadata,
     airflow,
     data_service,
+    metric_category,
+    table_owner,
+    datasource_permission,
+    metric_definitions,
+    dag,
+    etl_scripts,
+    cube_model,
 )
 
 api_router = APIRouter()
@@ -55,3 +62,12 @@ api_router.include_router(airflow.router, prefix="/airflow", tags=["Airflow调�
 
 # Data Service Center
 api_router.include_router(data_service.router, prefix="/data-services", tags=["数据服务"])
+
+# Metric Categories & Table Owners & Datasource Permissions
+api_router.include_router(metric_category.router, prefix="/metric-categories", tags=["指标分类"])
+api_router.include_router(table_owner.router, prefix="/table-owners", tags=["表负责人"])
+api_router.include_router(datasource_permission.router, prefix="/datasource-permissions", tags=["数据源权限"])
+api_router.include_router(metric_definitions.router, prefix="/metric-definitions", tags=["指标定义"])
+api_router.include_router(dag.router, prefix="/dag-workflows", tags=["DAG 工作流"])
+api_router.include_router(etl_scripts.router, prefix="/etl-scripts", tags=["ETL 脚本"])
+api_router.include_router(cube_model.router, prefix="/cube-model", tags=["Cube 建模"])

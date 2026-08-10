@@ -86,7 +86,7 @@ def execute_spark_job(**context):
     spark_conf = spark_config.get("conf", {})
 
     # --- 构建 spark-submit 基础命令 ---
-    spark_home = os.environ.get("SPARK_HOME", "/opt/spark")
+    spark_home = os.environ.get("SPARK_HOME", "/home/spark")
     cmd = [f"{spark_home}/bin/spark-submit"]
 
     # Master & deploy mode
@@ -149,7 +149,7 @@ def execute_spark_job(**context):
         if jars:
             cmd.extend(["--jars", jars])
         for key, value in spark_conf.items():
-            cmd.extend(["--conf", f"{key}={value}])
+            cmd.extend(["--conf", f"{key}={value}"])
         cmd.extend(["-f", tmp_sql])
 
         print(f"[Spark] Executing: {' '.join(cmd)}")

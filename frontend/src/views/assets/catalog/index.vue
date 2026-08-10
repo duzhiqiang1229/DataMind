@@ -21,7 +21,7 @@
             <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
             <el-table-column label="操作" width="100">
               <template #default="{ row }">
-                <el-button text type="primary" size="small" @click="viewLineage(row)">血缘</el-button>
+                <el-button link type="primary" size="small" @click="viewLineage(row)">血缘</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -58,7 +58,7 @@
               </el-table-column>
               <el-table-column label="操作" width="100">
                 <template #default="{ row }">
-                  <el-button text type="primary" size="small" @click="viewLineage(row)">血缘</el-button>
+                  <el-button link type="primary" size="small" @click="viewLineage(row)">血缘</el-button>
                 </template>
               </el-table-column>
             </el-table>

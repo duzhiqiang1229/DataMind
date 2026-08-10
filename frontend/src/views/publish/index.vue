@@ -16,7 +16,8 @@
             <el-option label="Spark任务" value="spark_task" />
             <el-option label="DataX任务" value="datax_task" />
           </el-select>
-          <el-button :icon="Refresh" @click="loadData">刷新</el-button>
+          <el-button type="primary" @click="handleFilterChange">查询</el-button>
+          <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
         </div>
       </div>
     </el-card>
@@ -51,7 +52,7 @@
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="created_at" label="创建时间" width="160" />
+            <el-table-column label="创建时间" width="160"><template #default="{ row }">{{ formatDateTime(row.created_at) }}</template></el-table-column>
           </el-table>
 
           <el-pagination
@@ -101,8 +102,8 @@
                   {{ statusLabel(currentTask.status) }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="创建时间">{{ currentTask.created_at || "-" }}</el-descriptions-item>
-              <el-descriptions-item label="执行时间">{{ currentTask.executed_at || "-" }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ formatDateTime(currentTask.created_at) }}</el-descriptions-item>
+              <el-descriptions-item label="执行时间">{{ formatDateTime(currentTask.executed_at) }}</el-descriptions-item>
               <el-descriptions-item label="描述" :span="2">{{ currentTask.description || "-" }}</el-descriptions-item>
             </el-descriptions>
 
@@ -157,7 +158,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue";
-import { Plus, Refresh, VideoPlay } from "@element-plus/icons-vue";
+import { Plus, Refresh, RefreshLeft, VideoPlay } from "@element-plus/icons-vue";
+import { formatDateTime } from "@/utils/format";
 import { ElMessage, ElMessageBox, type FormInstance } from "element-plus";
 import { publishApi } from "@/api";
 
@@ -215,6 +217,12 @@ async function loadData() {
 }
 
 function handleFilterChange() {
+  pagination.page = 1;
+  loadData();
+}
+
+function handleReset() {
+  filterType.value = "";
   pagination.page = 1;
   loadData();
 }

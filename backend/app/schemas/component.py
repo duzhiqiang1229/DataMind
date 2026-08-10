@@ -39,6 +39,7 @@ class ComponentConfigResponse(BaseModel):
     base_url: str
     config_json: dict
     auth_type: str
+    credentials: Optional[dict] = None
     status: str
     last_check_at: Optional[datetime] = None
     last_check_ok: Optional[bool] = None
