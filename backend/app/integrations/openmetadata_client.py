@@ -80,16 +80,20 @@ class OpenMetadataClient(ComponentAdapter):
         sort_field: str = "updatedAt",
         sort_order: str = "desc",
     ) -> dict:
+        active_query = "deleted:false"
+        if query and query != "*":
+            active_query = f"({query}) AND {active_query}"
+
         if entity_type == "all":
             entity_filter = " OR ".join(ASSET_ENTITY_TYPES)
-            scoped_query = f"entityType:({entity_filter})"
-            if query and query != "*":
-                scoped_query = f"({query}) AND {scoped_query}"
+            scoped_query = f"{active_query} AND entityType:({entity_filter})"
             return await self._search_index(
                 scoped_query, ASSET_INDEXES["all"], offset, limit, sort_field, sort_order,
             )
         index = ASSET_INDEXES.get(entity_type, ASSET_INDEXES["table"])
-        return await self._search_index(query, index, offset, limit, sort_field, sort_order)
+        return await self._search_index(
+            active_query, index, offset, limit, sort_field, sort_order,
+        )
 
     async def _search_index(
         self,

@@ -39,6 +39,7 @@ async def test_table_detail_uses_name_endpoint_and_jwt():
 async def test_search_assets_normalizes_elasticsearch_hits():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.params["index"] == "dashboard_search_index"
+        assert request.url.params["q"] == "(sales) AND deleted:false"
         return httpx.Response(200, json={
             "hits": {
                 "total": {"value": 1, "relation": "eq"},
@@ -67,7 +68,10 @@ async def test_all_assets_uses_one_filtered_paginated_query():
         assert index == "all"
         assert request.url.params["from"] == "0"
         assert request.url.params["size"] == "20"
-        assert "entityType:(table OR dashboard OR pipeline OR topic OR mlmodel OR container)" == request.url.params["q"]
+        assert (
+            "deleted:false AND "
+            "entityType:(table OR dashboard OR pipeline OR topic OR mlmodel OR container)"
+        ) == request.url.params["q"]
         return httpx.Response(200, json={
             "hits": {
                 "total": {"value": 6, "relation": "eq"},
