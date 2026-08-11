@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_permission, PaginationParams
 from app.schemas.datasource import (
     DataSourceCreate, DataSourceUpdate, DataSourceResponse,
     ConnectionTestResponse,
@@ -38,7 +38,10 @@ async def list_datasources(
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 
 
-@router.post("", response_model=ResponseOK[DataSourceResponse], summary="新增数据源")
+@router.post(
+    "", response_model=ResponseOK[DataSourceResponse], summary="新增数据源",
+    dependencies=[Depends(require_permission("datasource:create"))],
+)
 async def create_datasource(
     req: DataSourceCreate,
     db: AsyncSession = Depends(get_db),
@@ -56,7 +59,10 @@ async def get_datasource(datasource_id: str, db: AsyncSession = Depends(get_db),
     return ResponseOK(data=result)
 
 
-@router.put("/{datasource_id}", response_model=ResponseOK[DataSourceResponse], summary="更新数据源")
+@router.put(
+    "/{datasource_id}", response_model=ResponseOK[DataSourceResponse], summary="更新数据源",
+    dependencies=[Depends(require_permission("datasource:update"))],
+)
 async def update_datasource(
     datasource_id: str,
     req: DataSourceUpdate,
@@ -71,7 +77,10 @@ async def update_datasource(
     return ResponseOK(data=result)
 
 
-@router.delete("/{datasource_id}", response_model=ResponseOK, summary="删除数据源")
+@router.delete(
+    "/{datasource_id}", response_model=ResponseOK, summary="删除数据源",
+    dependencies=[Depends(require_permission("datasource:delete"))],
+)
 async def delete_datasource(datasource_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     ok = await datasource_service.delete_datasource(db, __import__("uuid").UUID(datasource_id))
     if not ok:
@@ -79,13 +88,19 @@ async def delete_datasource(datasource_id: str, db: AsyncSession = Depends(get_d
     return ResponseOK()
 
 
-@router.post("/{datasource_id}/test", response_model=ResponseOK[ConnectionTestResponse], summary="连接测试")
+@router.post(
+    "/{datasource_id}/test", response_model=ResponseOK[ConnectionTestResponse], summary="连接测试",
+    dependencies=[Depends(require_permission("datasource:update"))],
+)
 async def test_connection(datasource_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     result = await datasource_service.test_connection(db, __import__("uuid").UUID(datasource_id))
     return ResponseOK(data=result)
 
 
-@router.post("/{datasource_id}/query", response_model=ResponseOK[dict], summary="执行数据源查询")
+@router.post(
+    "/{datasource_id}/query", response_model=ResponseOK[dict], summary="执行数据源查询",
+    dependencies=[Depends(require_permission("doris:query:execute"))],
+)
 async def query_datasource(
     datasource_id: str,
     req: DatasourceQueryRequest,

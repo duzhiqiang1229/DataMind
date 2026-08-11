@@ -9,19 +9,18 @@ from loguru import logger
 
 from app.models import SavedQuery, QueryHistory
 from app.services.component_service import get_doris_client
+from app.utils.sql_safety import validate_read_only_sql
 
 
 async def execute_query(
     db: AsyncSession, sql: str, database: Optional[str], limit: int, user_id: uuid.UUID
 ) -> dict:
     """Execute a SELECT query on Doris and record history."""
-    sql_stripped = sql.strip()
-    if not sql_stripped.upper().startswith("SELECT") and not sql_stripped.upper().startswith("SHOW") and not sql_stripped.upper().startswith("DESC"):
-        raise ValueError("Only SELECT/SHOW/DESC queries are allowed")
+    sql_stripped = validate_read_only_sql(sql, allow_with=False)
 
     doris = await get_doris_client(db)
     try:
-        result = await doris.execute_query(sql, database, limit)
+        result = await doris.execute_query(sql_stripped, database, limit)
 
         # save to history
         history = QueryHistory(

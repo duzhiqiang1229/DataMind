@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_role, PaginationParams
 from app.schemas.publish import PublishTaskCreate
 from app.schemas.common import ResponseOK, PageResponse, PageResult
 from app.services import publish_service
 
 router = APIRouter()
+engineer_only = [Depends(require_role("data_engineer"))]
 
 
 @router.get("", response_model=PageResponse[dict], summary="发布任务列表")
@@ -27,7 +28,7 @@ async def list_publish_tasks(
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 
 
-@router.post("", response_model=ResponseOK[dict], summary="创建发布任务")
+@router.post("", response_model=ResponseOK[dict], summary="创建发布任务", dependencies=engineer_only)
 async def create_publish_task(
     req: PublishTaskCreate,
     db: AsyncSession = Depends(get_db),
@@ -48,7 +49,7 @@ async def get_publish_task(task_id: str, db: AsyncSession = Depends(get_db), use
     return ResponseOK(data=result)
 
 
-@router.post("/{task_id}/execute", response_model=ResponseOK[dict], summary="执行发布任务")
+@router.post("/{task_id}/execute", response_model=ResponseOK[dict], summary="执行发布任务", dependencies=engineer_only)
 async def execute_publish_task(
     task_id: str,
     db: AsyncSession = Depends(get_db),
@@ -63,7 +64,7 @@ async def execute_publish_task(
         return ResponseOK(code=500, message=str(e))
 
 
-@router.delete("/{task_id}", response_model=ResponseOK, summary="删除发布任务")
+@router.delete("/{task_id}", response_model=ResponseOK, summary="删除发布任务", dependencies=engineer_only)
 async def delete_publish_task(task_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     ok = await publish_service.delete_task(db, uuid.UUID(task_id))
     if not ok:

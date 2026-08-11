@@ -2,16 +2,16 @@
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_role, PaginationParams
 from app.schemas.common import ResponseOK, PageResponse, PageResult
 from app.services import user_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_role("admin"))])
 
 
 class UserCreate(BaseModel):

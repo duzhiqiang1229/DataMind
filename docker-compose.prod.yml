@@ -5,40 +5,92 @@
 # ============================================================
 name: datamind
 
+# Keep OpenMetadata services in the same Docker Compose project so Docker
+# Desktop shows one `datamind` application with all platform components.
+include:
+  - path: ./openmetadata/docker-compose.yml
+    env_file: ./openmetadata/.env
+
 services:
   # PostgreSQL - platform database
   postgres:
     # Keep 15 to match existing data volume (upgrade later via pg_upgrade)
     image: postgres:15
-    container_name: datamind-postgres
+    container_name: postgres
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: datamind
-      POSTGRES_PASSWORD: datamind
-      POSTGRES_DB: datamind
-    ports:
-      - "5432:5432"
+    env_file:
+      - ./backend/.env
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export POSTGRES_USER="$${DB_USER}"
+        export POSTGRES_PASSWORD="$${DB_PASSWORD}"
+        export POSTGRES_DB="$${DB_NAME}"
+        exec docker-entrypoint.sh postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/001_init_schema.sql:/docker-entrypoint-initdb.d/001_init_schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U datamind"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${DB_USER}\" -d \"$${DB_NAME}\""]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  # Idempotently prepare the two OpenMetadata databases in the shared
+  # PostgreSQL instance. This also keeps role passwords in sync on restart.
+  openmetadata-db-init:
+    image: postgres:15
+    container_name: openmetadata-db-init
+    restart: "no"
+    env_file:
+      - ./backend/.env
+      - ./openmetadata/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command:
+      - |
+        export PGPASSWORD="$${DB_PASSWORD}"
+        psql --host=postgres --username="$${DB_USER}" --dbname="$${DB_NAME}" \
+          --set=om_user="$${OM_DB_USER}" \
+          --set=om_password="$${OM_DB_PASSWORD}" \
+          --set=om_database="$${OM_DATABASE}" \
+          --set=airflow_user="$${OM_AIRFLOW_DB_USER}" \
+          --set=airflow_password="$${OM_AIRFLOW_DB_PASSWORD}" \
+          --set=airflow_database="$${OM_AIRFLOW_DATABASE}" <<'SQL'
+        SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'om_user', :'om_password')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'om_user') \gexec
+        SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'om_user', :'om_password') \gexec
+        SELECT format('CREATE DATABASE %I OWNER %I', :'om_database', :'om_user')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'om_database') \gexec
+        SELECT format('ALTER DATABASE %I OWNER TO %I', :'om_database', :'om_user') \gexec
+
+        SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'airflow_user', :'airflow_password')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'airflow_user') \gexec
+        SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'airflow_user', :'airflow_password') \gexec
+        SELECT format('CREATE DATABASE %I OWNER %I', :'airflow_database', :'airflow_user')
+        WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'airflow_database') \gexec
+        SELECT format('ALTER DATABASE %I OWNER TO %I', :'airflow_database', :'airflow_user') \gexec
+        SQL
+
   # Redis - cache + token blacklist
   redis:
     image: redis:7.2-alpine
-    container_name: datamind-redis
+    container_name: redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
+    env_file:
+      - ./backend/.env
+    command:
+      - /bin/sh
+      - -ec
+      - exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -48,7 +100,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: datamind-backend
+    container_name: backend
     restart: unless-stopped
     env_file:
       - ./backend/.env
@@ -60,6 +112,7 @@ services:
       - APP_DEBUG=false
       - APP_ENV=production
       - DATAMIND_IN_DOCKER=true
+      - EXECUTOR_URL=http://executor:8010
       - CUBE_COMPOSE_DIR=/datamind
       - CUBE_MODEL_CUBES_DIR=/datamind/cube/model/cubes
       - CUBE_MODEL_VIEWS_DIR=/datamind/cube/model/views
@@ -69,40 +122,100 @@ services:
     volumes:
       - ./airflow-dags:/opt/airflow/dags
       - ./cube:/datamind/cube
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      executor:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     command: >
       python -m uvicorn app.main:app
-      --host 0.0.0.0 --port 8000 --workers 2
+      --host 0.0.0.0 --port 8000 --workers 1
+
+  # Restricted executor - the only service allowed to access Docker Engine.
+  executor:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: executor
+    restart: unless-stopped
+    entrypoint: []
+    command: >
+      python -m uvicorn app.executor_main:app
+      --host 0.0.0.0 --port 8010 --workers 1
+    env_file:
+      - ./backend/.env
+    environment:
+      - APP_ENV=production
+      - CUBE_COMPOSE_DIR=/datamind
+    expose:
+      - "8010"
+    volumes:
+      - ./cube:/datamind/cube
+      - /var/run/docker.sock:/var/run/docker.sock
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
   # Frontend - Nginx serving built Vue app + API proxy
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: datamind-frontend
+    container_name: frontend
     restart: unless-stopped
     ports:
       - "80:80"
       - "5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
   # Cube 语义层（模型文件挂载自 ./cube/model）
+  cubestore:
+    image: cubejs/cubestore:latest
+    container_name: cubestore
+    restart: unless-stopped
+    environment:
+      CUBESTORE_REMOTE_DIR: /cube/data
+    volumes:
+      - cubestore_data:/cube/data
+
   cube:
     image: cubejs/cube:latest
-    container_name: datamind-cube
+    container_name: cube
     restart: unless-stopped
     ports:
       - "4000:4000"
     env_file:
       - ./cube/.env
+    environment:
+      CUBEJS_CUBESTORE_HOST: cubestore
+    depends_on:
+      cubestore:
+        condition: service_started
     volumes:
       - ./cube/model:/cube/conf/model
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   # DataX 执行容器（后端通过 docker CLI 动态调用）
   datax:
@@ -110,9 +223,9 @@ services:
       context: ./datax
       dockerfile: Dockerfile
     image: datamind-datax:latest
-    container_name: datamind-datax
+    container_name: datax
     restart: unless-stopped
-    command: ["tail", "-f", "/dev/null"]
+    entrypoint: ["tail", "-f", "/dev/null"]
     volumes:
       - datax_jobs:/jobs
 
@@ -120,3 +233,4 @@ volumes:
   postgres_data:
   redis_data:
   datax_jobs:
+  cubestore_data:

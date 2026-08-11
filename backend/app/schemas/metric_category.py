@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MetricCategoryCreate(BaseModel):
@@ -29,8 +29,7 @@ class MetricCategoryResponse(BaseModel):
     sort_order: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MetricMappingCreate(BaseModel):
@@ -48,5 +47,4 @@ class MetricMappingResponse(BaseModel):
     metric_label: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

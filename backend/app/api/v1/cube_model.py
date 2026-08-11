@@ -4,11 +4,12 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_role
 from app.schemas.common import ResponseOK
 from app.services import cube_model_service
 
 router = APIRouter()
+engineer_only = [Depends(require_role("data_engineer"))]
 
 
 class CubePayload(BaseModel):
@@ -42,7 +43,7 @@ async def get_cube(name: str, db: AsyncSession = Depends(get_db), user=Depends(g
     return ResponseOK(data=cube)
 
 
-@router.post("/cubes", response_model=ResponseOK[dict], summary="保存 Cube")
+@router.post("/cubes", response_model=ResponseOK[dict], summary="保存 Cube", dependencies=engineer_only)
 async def save_cube(body: CubePayload, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     try:
         cube = cube_model_service.save_cube(body.model_dump())
@@ -52,7 +53,7 @@ async def save_cube(body: CubePayload, db: AsyncSession = Depends(get_db), user=
     return ResponseOK(data={**cube, "refresh": refresh})
 
 
-@router.delete("/cubes/{name}", response_model=ResponseOK, summary="删除 Cube")
+@router.delete("/cubes/{name}", response_model=ResponseOK, summary="删除 Cube", dependencies=engineer_only)
 async def delete_cube(name: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     ok = cube_model_service.delete_cube(name)
     if not ok:
@@ -61,7 +62,7 @@ async def delete_cube(name: str, db: AsyncSession = Depends(get_db), user=Depend
     return ResponseOK()
 
 
-@router.post("/views", response_model=ResponseOK[dict], summary="保存 View")
+@router.post("/views", response_model=ResponseOK[dict], summary="保存 View", dependencies=engineer_only)
 async def save_view(body: ViewPayload, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     try:
         view = cube_model_service.save_view(body.model_dump())
@@ -71,7 +72,7 @@ async def save_view(body: ViewPayload, db: AsyncSession = Depends(get_db), user=
     return ResponseOK(data={**view, "refresh": refresh})
 
 
-@router.delete("/views/{name}", response_model=ResponseOK, summary="删除 View")
+@router.delete("/views/{name}", response_model=ResponseOK, summary="删除 View", dependencies=engineer_only)
 async def delete_view(name: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     ok = cube_model_service.delete_view(name)
     if not ok:
@@ -80,6 +81,6 @@ async def delete_view(name: str, db: AsyncSession = Depends(get_db), user=Depend
     return ResponseOK()
 
 
-@router.post("/refresh", response_model=ResponseOK[dict], summary="刷新 Cube 模型")
+@router.post("/refresh", response_model=ResponseOK[dict], summary="刷新 Cube 模型", dependencies=engineer_only)
 async def refresh(db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     return ResponseOK(data=await cube_model_service.refresh_cube())

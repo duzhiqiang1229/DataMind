@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_role, PaginationParams
 from app.schemas.component import (
     ComponentConfigCreate, ComponentConfigUpdate, ComponentConfigResponse,
     HealthCheckResponse,
@@ -12,7 +12,7 @@ from app.schemas.component import (
 from app.schemas.common import ResponseOK, PageResponse, PageResult
 from app.services import component_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_role("admin"))])
 
 
 @router.get("", response_model=PageResponse[ComponentConfigResponse], summary="组件列表")

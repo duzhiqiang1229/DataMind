@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_role, PaginationParams
 from app.schemas.spark_task import SparkTaskCreate, SparkTaskUpdate, SparkTaskTrigger
 from app.schemas.common import ResponseOK, PageResponse, PageResult
 from app.services import spark_service
 
 router = APIRouter()
+engineer_only = [Depends(require_role("data_engineer"))]
 
 
 @router.get("", response_model=PageResponse[dict], summary="Spark任务列表")
@@ -24,7 +25,7 @@ async def list_spark_tasks(
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 
 
-@router.post("", response_model=ResponseOK[dict], summary="创建Spark任务")
+@router.post("", response_model=ResponseOK[dict], summary="创建Spark任务", dependencies=engineer_only)
 async def create_spark_task(
     req: SparkTaskCreate,
     db: AsyncSession = Depends(get_db),
@@ -45,7 +46,7 @@ async def get_spark_task(task_id: str, db: AsyncSession = Depends(get_db), user=
     return ResponseOK(data=result)
 
 
-@router.put("/{task_id}", response_model=ResponseOK[dict], summary="更新任务")
+@router.put("/{task_id}", response_model=ResponseOK[dict], summary="更新任务", dependencies=engineer_only)
 async def update_spark_task(
     task_id: str,
     req: SparkTaskUpdate,
@@ -58,7 +59,7 @@ async def update_spark_task(
     return ResponseOK(data=result)
 
 
-@router.delete("/{task_id}", response_model=ResponseOK, summary="删除任务")
+@router.delete("/{task_id}", response_model=ResponseOK, summary="删除任务", dependencies=engineer_only)
 async def delete_spark_task(task_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     ok = await spark_service.delete_task(db, uuid.UUID(task_id))
     if not ok:
@@ -66,7 +67,7 @@ async def delete_spark_task(task_id: str, db: AsyncSession = Depends(get_db), us
     return ResponseOK()
 
 
-@router.post("/{task_id}/trigger", response_model=ResponseOK[dict], summary="触发任务执行")
+@router.post("/{task_id}/trigger", response_model=ResponseOK[dict], summary="触发任务执行", dependencies=engineer_only)
 async def trigger_spark_task(
     task_id: str,
     req: SparkTaskTrigger = SparkTaskTrigger(),

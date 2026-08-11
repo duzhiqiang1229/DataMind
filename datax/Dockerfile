@@ -6,13 +6,13 @@
 # 说明: 构建时需要联网下载 DataX 发行包；若下载失败，
 #       可手动把 datax.tar.gz 放到本目录，改用 COPY 方式。
 # ============================================================
-FROM python:3.9-slim
+FROM python:3.9-slim-bookworm
 
 RUN rm -f /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list \
     && . /etc/os-release \
     && printf 'deb http://mirrors.aliyun.com/debian/ %s main\ndeb http://mirrors.aliyun.com/debian/ %s-updates main\ndeb http://mirrors.aliyun.com/debian-security/ %s-security main\n' "$VERSION_CODENAME" "$VERSION_CODENAME" "$VERSION_CODENAME" > /etc/apt/sources.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends openjdk-11-jre-headless curl unzip \
+    && apt-get install -y --no-install-recommends openjdk-17-jre-headless curl unzip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fL -o /tmp/datax.tar.gz \
@@ -21,6 +21,6 @@ RUN curl -fL -o /tmp/datax.tar.gz \
     && tar -xzf /tmp/datax.tar.gz -C /opt --strip-components=1 \
     && rm -f /tmp/datax.tar.gz
 
-WORKDIR /opt/datax
+WORKDIR /opt
 
-ENTRYPOINT ["python", "/opt/datax/bin/datax.py"]
+ENTRYPOINT ["python", "/opt/bin/datax.py"]

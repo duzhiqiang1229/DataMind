@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_permission, PaginationParams
 from app.schemas.doris_query import (
     QueryRequest, QueryResultResponse,
     SavedQueryCreate, SavedQueryResponse,
@@ -20,7 +20,10 @@ router = APIRouter()
 # SQL 查询
 # ============================================================
 
-@router.post("/execute", response_model=ResponseOK[QueryResultResponse], summary="执行SQL查询")
+@router.post(
+    "/execute", response_model=ResponseOK[QueryResultResponse], summary="执行SQL查询",
+    dependencies=[Depends(require_permission("doris:query:execute"))],
+)
 async def execute_query(
     req: QueryRequest,
     db: AsyncSession = Depends(get_db),
@@ -85,7 +88,10 @@ async def list_saved_queries(
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 
 
-@router.post("/saved", response_model=ResponseOK[SavedQueryResponse], summary="保存查询")
+@router.post(
+    "/saved", response_model=ResponseOK[SavedQueryResponse], summary="保存查询",
+    dependencies=[Depends(require_permission("doris:query:save"))],
+)
 async def save_query(
     req: SavedQueryCreate,
     db: AsyncSession = Depends(get_db),
@@ -95,7 +101,10 @@ async def save_query(
     return ResponseOK(data=result)
 
 
-@router.delete("/saved/{query_id}", response_model=ResponseOK, summary="删除保存的查询")
+@router.delete(
+    "/saved/{query_id}", response_model=ResponseOK, summary="删除保存的查询",
+    dependencies=[Depends(require_permission("doris:query:save"))],
+)
 async def delete_saved_query(query_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     import uuid
     ok = await doris_query_service.delete_saved_query(db, uuid.UUID(query_id))

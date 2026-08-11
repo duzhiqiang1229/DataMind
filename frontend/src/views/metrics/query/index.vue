@@ -153,7 +153,7 @@ import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } 
 import { useRouter, useRoute } from "vue-router";
 import { Plus, Search, RefreshLeft, Refresh, VideoPlay, Delete, DataAnalysis } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import * as echarts from "echarts";
+import * as echarts from "@/utils/echarts";
 import { cubeApi, metricDefinitionApi } from "@/api";
 
 const router = useRouter();

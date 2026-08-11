@@ -1,5 +1,13 @@
 <template>
   <div class="table-steward">
+    <el-alert v-if="omHealthy" type="info" :closable="false" show-icon class="om-tip">
+      OpenMetadata 已接管统一责任人和业务域治理；本页保留 DataMind 本地责任人作为补充映射。
+    </el-alert>
+    <el-row v-if="omHealthy" :gutter="12" class="governance-overview">
+      <el-col :span="8"><el-card shadow="never"><b>{{ omSummary.coverage?.owners || 0 }}%</b><span>资产责任人覆盖率</span></el-card></el-col>
+      <el-col :span="8"><el-card shadow="never"><b>{{ omGovernance.domains?.length || 0 }}</b><span>OpenMetadata 业务域</span></el-card></el-col>
+      <el-col :span="8"><el-card shadow="never"><b>{{ omGovernance.dataProducts?.length || 0 }}</b><span>已登记数据产品</span></el-card></el-col>
+    </el-row>
     <el-card>
       <template #header>
         <div class="card-header">
@@ -109,9 +117,9 @@
 import { ref, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Plus } from "@element-plus/icons-vue";
-import { tableOwnerApi, queryApi } from "@/api";
+import { tableOwnerApi, queryApi, openmetadataApi } from "@/api";
 
-type TagType = "primary" | "success" | "info" | "warning" | "danger" | "";
+type TagType = "primary" | "success" | "info" | "warning" | "danger";
 
 interface OwnerRow {
   id?: string;
@@ -130,6 +138,9 @@ const pageSize = ref(20);
 const total = ref(0);
 const filterDatabase = ref("");
 const databaseOptions = ref<string[]>([]);
+const omHealthy = ref(false);
+const omSummary = ref<any>({ coverage: {} });
+const omGovernance = ref<any>({ domains: [], dataProducts: [] });
 
 const dialogVisible = ref(false);
 const form = ref<OwnerRow>({ database_name: "", table_name: "", owner_name: "", owner_type: "person", contact: "" });
@@ -171,7 +182,7 @@ const loadOwners = async () => {
   }
 };
 
-const openDialog = (row: OwnerRow | null) => {
+const openDialog = (row: OwnerRow | null | any) => {
   if (row) {
     form.value = { ...row };
   } else {
@@ -204,7 +215,7 @@ const saveOwner = async () => {
   }
 };
 
-const deleteOwner = async (row: OwnerRow) => {
+const deleteOwner = async (row: OwnerRow | any) => {
   try {
     await ElMessageBox.confirm(`确认删除「${row.database_name}.${row.table_name}」的责任人设置？`, "提示", { type: "warning" });
     await tableOwnerApi.removeOwner(row.database_name, row.table_name);
@@ -218,6 +229,13 @@ const deleteOwner = async (row: OwnerRow) => {
 onMounted(() => {
   loadDatabases();
   loadOwners();
+  Promise.all([openmetadataApi.health(), openmetadataApi.summary(), openmetadataApi.governance()])
+    .then(([health, summary, governance]: any[]) => {
+      omHealthy.value = !!health?.healthy;
+      omSummary.value = summary || omSummary.value;
+      omGovernance.value = governance || omGovernance.value;
+    })
+    .catch(() => { omHealthy.value = false; });
 });
 </script>
 
@@ -241,6 +259,16 @@ onMounted(() => {
     margin-top: 16px;
     display: flex;
     justify-content: flex-end;
+  }
+
+  .om-tip { margin-bottom: 12px; }
+
+  .governance-overview {
+    margin-bottom: 12px;
+
+    :deep(.el-card__body) { display: flex; align-items: baseline; gap: 10px; }
+    b { font-size: 24px; color: #409eff; }
+    span { color: #606266; }
   }
 }
 </style>

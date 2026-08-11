@@ -4,7 +4,7 @@ services:
   # ============================================================
   postgres:
     image: postgres:16-alpine
-    container_name: datamind-postgres
+    container_name: postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: datamind
@@ -26,7 +26,7 @@ services:
   # ============================================================
   redis:
     image: redis:7.2-alpine
-    container_name: datamind-redis
+    container_name: redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     ports:
@@ -46,7 +46,7 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    container_name: datamind-backend
+    container_name: backend
     restart: unless-stopped
     env_file:
       - ../backend/.env

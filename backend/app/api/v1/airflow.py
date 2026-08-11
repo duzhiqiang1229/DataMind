@@ -6,11 +6,12 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_role, PaginationParams
 from app.schemas.common import ResponseOK, PageResponse, PageResult
 from app.services import airflow_service
 
 router = APIRouter()
+engineer_only = [Depends(require_role("data_engineer"))]
 
 
 # --- Request body schemas ---
@@ -46,7 +47,7 @@ class UpdateDagFileBody(BaseModel):
     content: str
 
 
-@router.post("/deploy-dags", response_model=ResponseOK[dict], summary="部署 DAG 模板")
+@router.post("/deploy-dags", response_model=ResponseOK[dict], summary="部署 DAG 模板", dependencies=engineer_only)
 async def deploy_dags(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
@@ -58,7 +59,7 @@ async def deploy_dags(
     return ResponseOK(data=result)
 
 
-@router.post("/create-dag", response_model=ResponseOK[dict], summary="创建 DAG 任务")
+@router.post("/create-dag", response_model=ResponseOK[dict], summary="创建 DAG 任务", dependencies=engineer_only)
 async def create_dag(
     body: CreateDagBody,
     db: AsyncSession = Depends(get_db),
@@ -88,7 +89,7 @@ async def dag_runs(
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 
 
-@router.post("/sync-runs", response_model=ResponseOK[dict], summary="手动同步 DAG 运行记录")
+@router.post("/sync-runs", response_model=ResponseOK[dict], summary="手动同步 DAG 运行记录", dependencies=engineer_only)
 async def sync_runs(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
@@ -125,7 +126,7 @@ async def get_dag(
     return ResponseOK(data=result)
 
 
-@router.post("/{dag_id}/pause", response_model=ResponseOK[dict], summary="暂停DAG")
+@router.post("/{dag_id}/pause", response_model=ResponseOK[dict], summary="暂停DAG", dependencies=engineer_only)
 async def pause_dag(
     dag_id: str,
     db: AsyncSession = Depends(get_db),
@@ -138,7 +139,7 @@ async def pause_dag(
     return ResponseOK(data=result)
 
 
-@router.post("/{dag_id}/resume", response_model=ResponseOK[dict], summary="恢复DAG")
+@router.post("/{dag_id}/resume", response_model=ResponseOK[dict], summary="恢复DAG", dependencies=engineer_only)
 async def resume_dag(
     dag_id: str,
     db: AsyncSession = Depends(get_db),
@@ -151,7 +152,7 @@ async def resume_dag(
     return ResponseOK(data=result)
 
 
-@router.post("/{dag_id}/trigger", response_model=ResponseOK[dict], summary="触发DAG运行")
+@router.post("/{dag_id}/trigger", response_model=ResponseOK[dict], summary="触发DAG运行", dependencies=engineer_only)
 async def trigger_dag(
     dag_id: str,
     body: TriggerDagBody,
@@ -220,6 +221,7 @@ async def get_dag_run_log(
     "/{dag_id}/runs/{run_id}/retry",
     response_model=ResponseOK[dict],
     summary="重试失败任务",
+    dependencies=engineer_only,
 )
 async def retry_dag_run(
     dag_id: str,
@@ -237,7 +239,7 @@ async def retry_dag_run(
     return ResponseOK(code=code, message=result.get("message", ""), data=result)
 
 
-@router.put("/{dag_id}/schedule", response_model=ResponseOK[dict], summary="更新调度配置")
+@router.put("/{dag_id}/schedule", response_model=ResponseOK[dict], summary="更新调度配置", dependencies=engineer_only)
 async def update_schedule(
     dag_id: str,
     schedule: dict = Body(...),
@@ -250,7 +252,7 @@ async def update_schedule(
     return ResponseOK(data=result)
 
 
-@router.post("/dag-files", response_model=ResponseOK[dict], summary="新增调度脚本(.py DAG文件)")
+@router.post("/dag-files", response_model=ResponseOK[dict], summary="新增调度脚本(.py DAG文件)", dependencies=engineer_only)
 async def create_dag_file(
     body: CreateDagFileBody,
     db: AsyncSession = Depends(get_db),
@@ -282,7 +284,7 @@ async def get_dag_file(
     return ResponseOK(data=result)
 
 
-@router.put("/{dag_id}/file", response_model=ResponseOK[dict], summary="保存DAG文件内容")
+@router.put("/{dag_id}/file", response_model=ResponseOK[dict], summary="保存DAG文件内容", dependencies=engineer_only)
 async def update_dag_file(
     dag_id: str,
     body: UpdateDagFileBody,

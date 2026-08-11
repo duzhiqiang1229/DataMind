@@ -442,6 +442,18 @@ export const openmetadataApi = {
   search(q: string, limit = 20) {
     return request.get("/openmetadata/search", { params: { q, limit } });
   },
+  assets(params: { q?: string; entity_type?: string; page?: number; page_size?: number } = {}) {
+    return request.get("/openmetadata/assets", { params });
+  },
+  summary() {
+    return request.get("/openmetadata/summary");
+  },
+  governance(limit = 100) {
+    return request.get("/openmetadata/governance", { params: { limit } });
+  },
+  quality(table_fqn?: string, limit = 100) {
+    return request.get("/openmetadata/quality", { params: { table_fqn, limit } });
+  },
   health() {
     return request.get("/openmetadata/health");
   },

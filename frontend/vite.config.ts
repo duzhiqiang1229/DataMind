@@ -45,8 +45,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           "vendor-vue": ["vue", "vue-router", "pinia", "pinia-plugin-persistedstate"],
-          "vendor-element": ["element-plus", "@element-plus/icons-vue"],
-          "vendor-echarts": ["echarts"],
           "vendor-utils": ["axios", "dayjs", "nprogress"],
         },
       },

@@ -36,11 +36,11 @@ class TestUsersAPI:
 @pytest.mark.asyncio
 class TestPaginationParams:
     async def test_invalid_page_number(self, test_client):
-        """Page number < 1 should return 422."""
+        """Protected routes authenticate before validating query parameters."""
         resp = await test_client.get("/api/v1/users?page=0")
-        assert resp.status_code == 422
+        assert resp.status_code == 401
 
     async def test_invalid_page_size_too_large(self, test_client):
-        """Page size > 100 should return 422."""
+        """Protected routes do not expose validation details anonymously."""
         resp = await test_client.get("/api/v1/users?page_size=200")
-        assert resp.status_code == 422
+        assert resp.status_code == 401

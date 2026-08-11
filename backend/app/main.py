@@ -5,17 +5,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.core.config import settings
+from app.core.config import settings, validate_production_settings
 from app.core.database import engine, Base
 from app.core.redis import redis_client
 from app.api.router import api_router
 from app.utils.task_scheduler import init_scheduler, shutdown_scheduler
+from app.utils.operation_log_middleware import OperationLogMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle: startup & shutdown."""
     # --- Startup ---
+    validate_production_settings()
     logger.info(f"Starting {settings.APP_NAME} in {settings.APP_ENV} mode")
 
     # Create database tables (use Alembic in production)
@@ -60,7 +62,6 @@ app.add_middleware(
 )
 
 # Operation logging middleware (logs POST/PUT/DELETE operations)
-from app.utils.operation_log_middleware import OperationLogMiddleware
 app.add_middleware(OperationLogMiddleware)
 
 # Register API routes

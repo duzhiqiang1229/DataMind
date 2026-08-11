@@ -5,8 +5,6 @@ from datetime import datetime, timezone
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from loguru import logger
-
 from app.core.security import verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.config import settings
 from app.core.redis import redis_client
@@ -53,6 +51,9 @@ async def refresh(db: AsyncSession, refresh_token: str) -> dict:
 
     if payload.get("type") != "refresh":
         raise ValueError("Invalid token type")
+    jti = payload.get("jti")
+    if jti and await redis_client.exists(f"blacklist:{jti}"):
+        raise ValueError("Refresh token has already been used")
 
     user_id = payload.get("sub")
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
@@ -62,6 +63,7 @@ async def refresh(db: AsyncSession, refresh_token: str) -> dict:
 
     access = create_access_token(str(user.id), extra={"username": user.username})
     new_refresh = create_refresh_token(str(user.id))
+    await logout(refresh_token)
 
     return {
         "access_token": access,
@@ -113,7 +115,7 @@ async def logout(access_token: str):
         exp = payload.get("exp", 0)
         import time
         ttl = max(int(exp - time.time()), 1)
-        await redis_client.setex(f"blacklist:{jti}", ttl, "1")
+        await redis_client.set(f"blacklist:{jti}", "1", ex=ttl)
     except Exception:
         pass  # token invalid anyway
 

@@ -7,10 +7,11 @@ Key operations:
 - Get meta (available cubes/models/measurements)
 - Health check
 """
-from typing import Any, Optional
+import time
 
-from loguru import logger
+import jwt
 
+from app.core.config import settings
 from app.integrations.base import ComponentAdapter
 
 
@@ -19,6 +20,21 @@ class CubeClient(ComponentAdapter):
 
     def __init__(self, config: dict):
         super().__init__("cube", config)
+        self._api_secret = config.get("api_secret") or settings.CUBE_API_SECRET
+
+    async def _request(self, method: str, path: str, **kwargs):
+        """Attach a fresh short-lived Cube JWT to every request."""
+        if self._api_secret:
+            now = int(time.time())
+            token = jwt.encode(
+                {"sub": "datamind-backend", "iat": now, "exp": now + 300},
+                self._api_secret,
+                algorithm="HS256",
+            )
+            headers = dict(kwargs.pop("headers", {}))
+            headers["Authorization"] = f"Bearer {token}"
+            kwargs["headers"] = headers
+        return await super()._request(method, path, **kwargs)
 
     async def health_check(self) -> bool:
         try:

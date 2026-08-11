@@ -254,8 +254,10 @@ const dagRunsLoading = ref(false);
 const dagRuns = ref<any[]>([]);
 const currentDag = ref<any>(null);
 
-function stateType(state: string): string {
-  const map: Record<string, string> = {
+type TagType = "primary" | "success" | "warning" | "info" | "danger";
+
+function stateType(state: string): TagType {
+  const map: Record<string, TagType> = {
     success: "success",
     failed: "danger",
     running: "warning",

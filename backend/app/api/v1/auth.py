@@ -1,8 +1,6 @@
 """认证接口: 登录、刷新Token、当前用户信息、退出。"""
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from loguru import logger
-
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest, CurrentUserResponse
@@ -45,8 +43,8 @@ async def get_current_user_info(
 @router.post("/logout", response_model=ResponseOK, summary="退出登录")
 async def logout(
     user=Depends(get_current_user),
-    authorization: str = None,
+    authorization: str = Header(...),
 ):
     """退出登录，将 access_token 加入 Redis 黑名单。"""
-    # token blacklist is handled in auth_service.logout
+    await auth_service.logout(authorization.removeprefix("Bearer ").strip())
     return ResponseOK(message="Logged out")

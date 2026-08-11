@@ -97,10 +97,10 @@ import { ref, shallowRef, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { ElMessage } from "element-plus";
 import { Refresh } from "@element-plus/icons-vue";
 import { formatDateTime } from "@/utils/format";
-import * as echarts from "echarts";
+import * as echarts from "@/utils/echarts";
 import { dataServiceLogApi } from "@/api";
 
-type TagType = "primary" | "success" | "info" | "warning" | "danger" | "";
+type TagType = "primary" | "success" | "info" | "warning" | "danger";
 
 interface ApiOption {
   id: string;

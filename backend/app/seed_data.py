@@ -8,6 +8,7 @@ import asyncio
 from sqlalchemy import select
 from app.core.database import async_session, engine, Base
 from app.core.security import hash_password
+from app.core.config import settings
 from app.models import (
     User, Role, Permission, UserRole, Menu, RoleMenu,
     SystemConfig, RolePermission,
@@ -22,14 +23,19 @@ async def seed():
         print("Tables verified")
 
         # --- Admin user ---
-        admin_result = await db.execute(select(User).where(User.username == "admin"))
+        admin_username = settings.INITIAL_ADMIN_USERNAME
+        admin_password = settings.INITIAL_ADMIN_PASSWORD or "admin123"
+        if settings.APP_ENV.lower() == "production" and len(admin_password) < 12:
+            raise RuntimeError("INITIAL_ADMIN_PASSWORD must contain at least 12 characters in production")
+
+        admin_result = await db.execute(select(User).where(User.username == admin_username))
         admin = admin_result.scalar_one_or_none()
         if admin:
             print(f"Admin user already exists (id={admin.id})")
         else:
             admin = User(
-                username="admin",
-                hashed_password=hash_password("admin123"),
+                username=admin_username,
+                hashed_password=hash_password(admin_password),
                 email="admin@datamind.com",
                 full_name="System Admin",
                 department="IT",
@@ -103,6 +109,7 @@ async def seed():
             ("role:manage", "管理角色", "role", "create"),
         ]
         perm_ids = []
+        permission_map = {}
         for code, name, resource, action in perms_data:
             result = await db.execute(
                 select(Permission).where(Permission.permission_code == code)
@@ -120,6 +127,7 @@ async def seed():
                 db.add(p)
                 await db.flush()
             perm_ids.append(p.id)
+            permission_map[code] = p
 
         # --- Assign all permissions to admin role (idempotent) ---
         for pid in perm_ids:
@@ -132,6 +140,36 @@ async def seed():
             if not rp_result.scalar_one_or_none():
                 db.add(RolePermission(role_id=admin_role.id, permission_id=pid))
         print(f"Permissions assigned to admin role ({len(perm_ids)} perms)")
+
+        # Built-in roles get safe defaults. Administrators can still customize
+        # these mappings later through role management.
+        default_role_permissions = {
+            "viewer": {
+                "datasource:view", "datax:task:view", "component:view", "system:view",
+            },
+            "analyst": {
+                "datasource:view", "datax:task:view", "component:view", "system:view",
+                "doris:query:execute", "doris:query:save",
+            },
+            "data_engineer": {
+                "datasource:view", "datasource:create", "datasource:update", "datasource:delete",
+                "datax:task:view", "datax:task:create", "datax:task:update",
+                "datax:task:delete", "datax:task:execute", "doris:query:execute",
+                "doris:query:save", "component:view", "system:view",
+            },
+        }
+        for role_code, permission_codes in default_role_permissions.items():
+            role = role_map[role_code]
+            for permission_code in permission_codes:
+                permission = permission_map[permission_code]
+                rp_result = await db.execute(
+                    select(RolePermission).where(
+                        RolePermission.role_id == role.id,
+                        RolePermission.permission_id == permission.id,
+                    )
+                )
+                if not rp_result.scalar_one_or_none():
+                    db.add(RolePermission(role_id=role.id, permission_id=permission.id))
 
         # --- Menus (idempotent: check by route_path) ---
         menu_data = [
@@ -215,7 +253,7 @@ async def seed():
 
         await db.commit()
         print("\nSeed data complete!")
-        print("  Admin user: admin / admin123")
+        print(f"  Admin user: {admin_username}")
         print("  Roles: admin, data_engineer, analyst, viewer")
         print(f"  Permissions: {len(perm_ids)}")
         print(f"  Menus: {len(menu_ids)}")

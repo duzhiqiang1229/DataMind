@@ -146,7 +146,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, type FormInstance } from "element-plus";
 import {
   Timer, Coin, DataAnalysis, Files, Switch, Cpu,
   Connection, Lock, Setting, CircleCheck, InfoFilled, Upload,
@@ -165,6 +165,7 @@ const deploying = ref(false);
 const config = ref<any>(null);
 const formData = reactive<Record<string, any>>({});
 const datasourceOptions = ref<{ label: string; value: string }[]>([]);
+const formRef = ref<FormInstance>();
 
 const code = computed(() => route.params.code as string);
 const schema = computed<ComponentSchema | undefined>(() => COMPONENT_SCHEMAS[code.value]);
@@ -186,7 +187,7 @@ const visibleFields = computed<FormField[]>(() => {
 });
 
 const groupFields = computed(() => {
-  if (!schema.value) return false;
+  if (!schema.value) return [];
   const groups = [
     { key: "connection", label: "连接信息", fields: [] as FormField[] },
     { key: "credentials", label: "凭据信息", fields: [] as FormField[] },

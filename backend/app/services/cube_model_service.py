@@ -1,12 +1,10 @@
 """Cube modeling service: read/write Cube schema files (cubes/*.js, views/*.yml)."""
-import asyncio
 import os
 import re
 from pathlib import Path
 from typing import Optional
 
 import yaml
-from loguru import logger
 
 CUBES_DIR = Path(os.environ.get("CUBE_MODEL_CUBES_DIR", r"D:\DataMind\cube\model\cubes"))
 VIEWS_DIR = Path(os.environ.get("CUBE_MODEL_VIEWS_DIR", r"D:\DataMind\cube\model\views"))
@@ -239,17 +237,10 @@ def delete_view(name: str) -> bool:
 
 
 async def refresh_cube() -> dict:
-    """Restart the cube-server container so new schema files are loaded."""
-    proc = await asyncio.create_subprocess_exec(
-        "docker", "restart", "cube-server",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=180)
-    except asyncio.TimeoutError:
-        proc.kill()
-        return {"ok": False, "message": "Cube 容器重启超时"}
-    if proc.returncode != 0:
-        return {"ok": False, "message": f"重启失败: {(err or out).decode(errors='replace').strip()[:200]}"}
+    """Restart the configured Cube container so new schema files are loaded."""
+    from app.services.cube_deploy_service import restart_cube_container
+
+    code, out, err = await restart_cube_container()
+    if code != 0:
+        return {"ok": False, "message": f"重启失败: {(err or out).strip()[:200]}"}
     return {"ok": True, "message": "Cube 已重启，模型已生效"}

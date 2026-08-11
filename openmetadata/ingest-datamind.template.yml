@@ -1,0 +1,39 @@
+# Environment variables are expanded inside the ingestion container at runtime.
+# Never commit the rendered file because it contains database and JWT credentials.
+source:
+  type: postgres
+  serviceName: datamind_platform
+  serviceConnection:
+    config:
+      type: Postgres
+      username: ${DM_DB_USER}
+      authType:
+        password: ${DM_DB_PASSWORD}
+      hostPort: postgres:5432
+      database: ${DM_DB_NAME}
+      ingestAllDatabases: false
+      sslMode: disable
+  sourceConfig:
+    config:
+      type: DatabaseMetadata
+      includeTables: true
+      includeViews: true
+      includeStoredProcedures: true
+      includeDDL: true
+      markDeletedTables: true
+      markDeletedSchemas: true
+      markDeletedDatabases: true
+      schemaFilterPattern:
+        excludes:
+          - information_schema
+          - pg_catalog
+sink:
+  type: metadata-rest
+  config: {}
+workflowConfig:
+  loggerLevel: INFO
+  openMetadataServerConfig:
+    hostPort: http://openmetadata-server:8585/api
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: ${OM_JWT_TOKEN}

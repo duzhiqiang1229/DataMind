@@ -39,7 +39,7 @@
         </el-form-item>
       </el-form>
       <div class="login-footer">
-        <span>admin / admin123</span>
+        <span>请使用管理员分配的账号登录</span>
       </div>
     </div>
   </div>

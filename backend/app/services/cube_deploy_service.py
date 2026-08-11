@@ -1,21 +1,40 @@
 """Cube datasource sync: apply a platform data source to the local Cube container."""
 import asyncio
 import os
+import secrets
 from pathlib import Path
-from typing import Optional
-
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decrypt_value
+from app.core.config import settings
 from app.models import DataSource
 
 CUBE_COMPOSE_DIR = os.environ.get("CUBE_COMPOSE_DIR", r"D:\DataMind")
 CUBE_COMPOSE_FILE = os.path.join(CUBE_COMPOSE_DIR, "docker-compose.prod.yml")
 CUBE_ENV_FILE = os.path.join(CUBE_COMPOSE_DIR, "cube", ".env")
-CUBE_CONTAINER = os.environ.get("CUBE_CONTAINER_NAME", "datamind-cube")
+CUBE_CONTAINER = os.environ.get("CUBE_CONTAINER_NAME", "cube")
 DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
+EXECUTOR_URL = settings.EXECUTOR_URL.rstrip("/")
+
+
+async def _call_executor(action: str, timeout: int) -> tuple[int, str, str]:
+    """Call the internal allow-listed Docker executor."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                f"{EXECUTOR_URL}/v1/cube/{action}",
+                headers={"X-Executor-Token": settings.EXECUTOR_TOKEN},
+            )
+        if response.status_code != 200:
+            return response.status_code, "", response.text[:300]
+        payload = response.json()
+        return int(payload.get("code", 1)), payload.get("stdout", ""), payload.get("stderr", "")
+    except Exception as exc:
+        return 1, "", str(exc)
 
 # DataMind source type -> Cube DB driver
 _TYPE_MAP = {
@@ -46,6 +65,8 @@ async def _restart_cube_container(timeout: int = 180) -> tuple[int, str, str]:
     Uses the Docker Engine API over the mounted unix socket when running inside
     the DataMind compose network; falls back to the docker CLI on the host.
     """
+    if EXECUTOR_URL:
+        return await _call_executor("recreate", timeout)
     if not os.path.exists(DOCKER_SOCKET):
         return await _run_docker(["compose", "-f", CUBE_COMPOSE_FILE, "up", "-d", "cube"])
 
@@ -82,34 +103,68 @@ async def _restart_cube_container(timeout: int = 180) -> tuple[int, str, str]:
             env_map.update(env_updates)
             new_env = [f"{k}={v}" for k, v in env_map.items()]
 
+            old_host = info.get("HostConfig") or {}
+            # Copy only create-compatible settings. Passing the complete
+            # inspect HostConfig back to /containers/create includes runtime-
+            # only fields and breaks across Docker Engine versions.
+            host_config = {
+                key: old_host[key]
+                for key in (
+                    "Binds", "PortBindings", "RestartPolicy", "NetworkMode",
+                    "ReadonlyRootfs", "SecurityOpt", "LogConfig",
+                )
+                if key in old_host
+            }
+            endpoints = {
+                network_name: {
+                    "Aliases": endpoint.get("Aliases") or [],
+                }
+                for network_name, endpoint in (
+                    (info.get("NetworkSettings") or {}).get("Networks") or {}
+                ).items()
+            }
             create_body = {
                 "Image": cfg.get("Image"),
                 "Env": new_env,
                 "Cmd": cfg.get("Cmd"),
                 "Entrypoint": cfg.get("Entrypoint"),
                 "WorkingDir": cfg.get("WorkingDir"),
+                "User": cfg.get("User"),
+                "Healthcheck": cfg.get("Healthcheck"),
+                "StopSignal": cfg.get("StopSignal"),
                 "Labels": cfg.get("Labels") or {},
                 "ExposedPorts": cfg.get("ExposedPorts") or {},
-                "HostConfig": info.get("HostConfig") or {},
-                "NetworkingConfig": info.get("NetworkingConfig") or {},
+                "HostConfig": host_config,
                 "Tty": bool(cfg.get("Tty")),
                 "OpenStdin": bool(cfg.get("OpenStdin")),
             }
+            if endpoints:
+                create_body["NetworkingConfig"] = {"EndpointsConfig": endpoints}
 
-            # Stop and remove the old container (ignore missing/stopped errors).
+            replacement = f"{CUBE_CONTAINER}-replacement"
+            # Build the replacement before touching the running container.
+            await client.delete(f"/containers/{replacement}?force=true")
+            created = await client.post(
+                f"/containers/create?name={replacement}", json=create_body
+            )
+            if created.status_code not in (200, 201):
+                return created.status_code, "", f"create replacement: {created.text[:300]}"
+
+            # Stop and remove the old container only after replacement creation.
             for method, url in (
                 ("POST", f"/containers/{CUBE_CONTAINER}/stop"),
                 ("DELETE", f"/containers/{CUBE_CONTAINER}"),
             ):
                 resp = await client.request(method, url)
                 if resp.status_code not in (200, 204, 304, 404):
+                    await client.delete(f"/containers/{replacement}?force=true")
                     return resp.status_code, "", f"{method} {url}: {resp.text[:200]}"
 
-            created = await client.post(
-                f"/containers/create?name={CUBE_CONTAINER}", json=create_body
+            renamed = await client.post(
+                f"/containers/{replacement}/rename?name={CUBE_CONTAINER}"
             )
-            if created.status_code not in (200, 201):
-                return created.status_code, "", f"create: {created.text[:300]}"
+            if renamed.status_code not in (200, 204):
+                return renamed.status_code, "", f"rename replacement: {renamed.text[:300]}"
             started = await client.post(f"/containers/{CUBE_CONTAINER}/start")
             if started.status_code not in (200, 204, 304):
                 return started.status_code, "", f"start: {started.text[:300]}"
@@ -117,6 +172,28 @@ async def _restart_cube_container(timeout: int = 180) -> tuple[int, str, str]:
     except Exception as e:
         logger.error(f"[cube] Docker API restart failed: {e}")
         return 1, "", str(e)
+
+
+async def restart_cube_container(timeout: int = 180) -> tuple[int, str, str]:
+    """Restart the configured Cube container via Docker API or local CLI."""
+    if EXECUTOR_URL:
+        return await _call_executor("restart", timeout)
+    if not os.path.exists(DOCKER_SOCKET):
+        return await _run_docker(["restart", CUBE_CONTAINER], timeout=timeout)
+
+    import httpx
+    try:
+        transport = httpx.AsyncHTTPTransport(uds=DOCKER_SOCKET)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://docker", timeout=timeout
+        ) as client:
+            response = await client.post(f"/containers/{CUBE_CONTAINER}/restart?t=30")
+            if response.status_code not in (200, 204):
+                return response.status_code, "", response.text[:300]
+        return 0, "", ""
+    except Exception as exc:
+        logger.error(f"[cube] Docker API restart failed: {exc}")
+        return 1, "", str(exc)
 
 
 async def sync_cube_datasource(
@@ -153,16 +230,30 @@ async def sync_cube_datasource(
     except Exception as e:
         logger.warning(f"[cube] decrypt datasource password failed: {e}")
 
+    existing_env: dict[str, str] = {}
+    try:
+        for raw in Path(CUBE_ENV_FILE).read_text(encoding="utf-8").splitlines():
+            if raw.strip() and not raw.lstrip().startswith("#") and "=" in raw:
+                key, value = raw.split("=", 1)
+                existing_env[key.strip()] = value.strip()
+    except FileNotFoundError:
+        pass
+    api_secret = (
+        os.environ.get("CUBEJS_API_SECRET")
+        or existing_env.get("CUBEJS_API_SECRET")
+        or secrets.token_urlsafe(32)
+    )
+
     # write cube/.env consumed by docker compose (env_file)
     env_content = (
-        "CUBEJS_DEV_MODE=true\n"
+        f"CUBEJS_DEV_MODE={str(settings.APP_ENV.lower() != 'production').lower()}\n"
         f"CUBEJS_DB_TYPE={cube_db_type}\n"
         f"CUBEJS_DB_HOST={ds.host}\n"
         f"CUBEJS_DB_PORT={ds.port}\n"
         f"CUBEJS_DB_NAME={ds.database_name or ''}\n"
         f"CUBEJS_DB_USER={ds.username}\n"
         f"CUBEJS_DB_PASS={password}\n"
-        "CUBEJS_API_SECRET=secret\n"
+        f"CUBEJS_API_SECRET={api_secret}\n"
     )
     with open(CUBE_ENV_FILE, "w", encoding="utf-8") as f:
         f.write(env_content)

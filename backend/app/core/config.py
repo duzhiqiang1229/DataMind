@@ -1,8 +1,5 @@
 """Application configuration via Pydantic Settings."""
 from functools import lru_cache
-from typing import Optional
-
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +19,12 @@ class Settings(BaseSettings):
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
+    BOOTSTRAP_ADMIN: bool = False
+    INITIAL_ADMIN_USERNAME: str = "admin"
+    INITIAL_ADMIN_PASSWORD: str = ""
+    EXECUTOR_URL: str = ""
+    EXECUTOR_TOKEN: str = ""
+    CUBE_API_SECRET: str = ""
 
     # --- PostgreSQL ---
     DB_HOST: str = "127.0.0.1"
@@ -77,3 +80,35 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def validate_production_settings() -> None:
+    """Fail fast when a production process starts with unsafe key material."""
+    if settings.APP_ENV.lower() != "production":
+        return
+
+    errors: list[str] = []
+    if (
+        len(settings.JWT_SECRET_KEY) < 24
+        or settings.JWT_SECRET_KEY in {"change-in-production", "your-secret-key-change-in-production"}
+    ):
+        errors.append("JWT_SECRET_KEY must be a non-default secret of at least 24 characters")
+
+    if not settings.ENCRYPTION_KEY:
+        errors.append("ENCRYPTION_KEY is required")
+    else:
+        try:
+            from cryptography.fernet import Fernet
+            Fernet(settings.ENCRYPTION_KEY.encode())
+        except (ValueError, TypeError):
+            errors.append("ENCRYPTION_KEY must be a valid Fernet key")
+
+    if settings.BOOTSTRAP_ADMIN and len(settings.INITIAL_ADMIN_PASSWORD) < 12:
+        errors.append("INITIAL_ADMIN_PASSWORD must contain at least 12 characters")
+    if settings.EXECUTOR_URL and len(settings.EXECUTOR_TOKEN) < 24:
+        errors.append("EXECUTOR_TOKEN must contain at least 24 characters")
+    if len(settings.CUBE_API_SECRET) < 24:
+        errors.append("CUBE_API_SECRET must contain at least 24 characters")
+
+    if errors:
+        raise RuntimeError("Unsafe production configuration: " + "; ".join(errors))

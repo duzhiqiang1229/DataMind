@@ -12,6 +12,7 @@ from app.models import DataSource
 from app.schemas.datasource import (
     DataSourceCreate, DataSourceUpdate, DataSourceResponse, ConnectionTestResponse,
 )
+from app.utils.sql_safety import validate_read_only_sql
 
 # DB driver map for connection testing
 _DRIVER_MAP = {
@@ -194,15 +195,7 @@ async def execute_query(
     if ds.status != "active":
         raise ValueError("Data source is not active")
 
-    sql_stripped = sql.strip()
-    head = sql_stripped.upper()[:16]
-    if not (
-        head.startswith("SELECT")
-        or head.startswith("SHOW")
-        or head.startswith("DESC")
-        or head.startswith("WITH")
-    ):
-        raise ValueError("Only SELECT/SHOW/DESC/WITH queries are allowed")
+    sql_stripped = validate_read_only_sql(sql)
 
     password = decrypt_value(ds.password_encrypted)
     target_db = database or ds.database_name or ""
@@ -223,7 +216,7 @@ async def execute_query(
             raise ValueError(f"数据库连接失败：{e.args[-1] if e.args else e}") from e
         try:
             with conn.cursor() as cursor:
-                cursor.execute(sql)
+                cursor.execute(sql_stripped)
                 rows = cursor.fetchmany(limit + 1)
         except pymysql.err.MySQLError as e:
             raise ValueError(f"查询失败：{e.args[-1] if e.args else e}") from e
@@ -237,15 +230,17 @@ async def execute_query(
                 host=ds.host, port=ds.port, user=ds.username, password=password,
                 dbname=target_db, connect_timeout=10,
             )
+            conn.set_session(readonly=True, autocommit=False)
         except psycopg2.Error as e:
             raise ValueError(f"数据库连接失败：{e}") from e
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
-                cursor.execute(sql)
+                cursor.execute(sql_stripped)
                 rows = [dict(r) for r in cursor.fetchmany(limit + 1)]
         except psycopg2.Error as e:
             raise ValueError(f"查询失败：{e}") from e
         finally:
+            conn.rollback()
             conn.close()
     else:
         raise ValueError(f"Query not supported for source type: {ds.source_type}")

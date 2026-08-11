@@ -104,9 +104,10 @@
 
 <script setup lang="ts">
 import { ref, shallowRef, onMounted, onBeforeUnmount, nextTick } from "vue";
-import * as echarts from "echarts";
+import * as echarts from "@/utils/echarts";
 import { Search } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
+import { useRoute } from "vue-router";
 import { openmetadataApi } from "@/api";
 
 type NodeType = "source" | "target" | "current";
@@ -132,6 +133,7 @@ interface LineageResponse {
 }
 
 const chartRef = ref<HTMLElement | null>(null);
+const route = useRoute();
 const chartInstance = shallowRef<echarts.ECharts | null>(null);
 
 const loading = ref(false);
@@ -223,11 +225,11 @@ async function handleManualSearch() {
   }
 }
 
-async function loadLineage(fqn: string) {
+async function loadLineage(fqn: string, entityType = "table") {
   loading.value = true;
   selectedNode.value = null;
   try {
-    const res: LineageResponse = await openmetadataApi.lineage(fqn);
+    const res: LineageResponse = await openmetadataApi.lineage(fqn, entityType);
     renderChart(res, fqn);
   } catch {
     /* handled by interceptor */
@@ -407,6 +409,13 @@ onMounted(async () => {
     chartInstance.value.on("click", handleNodeClick);
   }
   window.addEventListener("resize", handleResize);
+  const fqn = typeof route.query.fqn === "string" ? route.query.fqn : "";
+  const entityType = typeof route.query.type === "string" ? route.query.type : "table";
+  if (fqn && omHealthy.value) {
+    searchQuery.value = fqn;
+    currentEntity.value = { name: fqn.split(".").pop() || fqn, fullyQualifiedName: fqn };
+    await loadLineage(fqn, entityType);
+  }
 });
 
 onBeforeUnmount(() => {

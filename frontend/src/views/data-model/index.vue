@@ -471,14 +471,14 @@ function handleNewModel() {
   infoDialogVisible.value = true;
 }
 
-function handleEdit(row: DataModel) {
+function handleEdit(row: any) {
   isNewModel.value = false;
   selectedModelId.value = row.id || "";
   Object.assign(currentModel, {
     ...row,
-    fields: (row.fields || []).map((f) => ({ ...f })),
+    fields: (row.fields || []).map((f: ModelField) => ({ ...f })),
   });
-  fields.value = (row.fields || []).map((f) => ({ ...f, sort_order: f.sort_order ?? 0 }));
+  fields.value = (row.fields || []).map((f: ModelField) => ({ ...f, sort_order: f.sort_order ?? 0 }));
   regenerateDDL();
   editDialogVisible.value = true;
 }
@@ -592,7 +592,7 @@ async function openVersionHistory(row: DataModel) {
 }
 
 // ---------- Publish & delete ----------
-async function handlePublish(row: DataModel) {
+async function handlePublish(row: any) {
   if (!row.id) return;
   try {
     await ElMessageBox.confirm(
@@ -612,7 +612,7 @@ async function handlePublish(row: DataModel) {
   }
 }
 
-async function handleDelete(row: DataModel) {
+async function handleDelete(row: any) {
   if (!row.id) return;
   await ElMessageBox.confirm(
     `确认删除模型 "${row.model_name}"？将同时删除 Doris 库中的 ${row.database}.${row.table_name} 表。`,

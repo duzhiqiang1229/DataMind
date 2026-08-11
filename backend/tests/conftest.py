@@ -5,8 +5,6 @@ Two test tiers:
   1. Unit tests (no external deps) - run by default
   2. Integration tests (need PostgreSQL + Redis) - run with: pytest -m integration
 """
-import asyncio
-import os
 import sys
 from pathlib import Path
 from typing import AsyncGenerator
@@ -17,17 +15,6 @@ import pytest
 backend_dir = str(Path(__file__).resolve().parent)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
-
-
-# ---------------------------------------------------------------------------
-# Event loop
-# ---------------------------------------------------------------------------
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create a single event loop for the entire test session."""
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +86,11 @@ async def test_db_session(db_available) -> AsyncGenerator:
         pytest.skip("PostgreSQL not available")
 
     from app.core.database import engine, Base, async_session
-    import app.models  # register all models with Base.metadata
+    import app.models  # noqa: F401  -- register all models with Base.metadata
+
+    # pytest-asyncio may create a fresh event loop per test. Ensure pooled
+    # asyncpg connections never cross event-loop boundaries.
+    await engine.dispose()
 
     # Create all tables
     async with engine.begin() as conn:
@@ -113,6 +104,7 @@ async def test_db_session(db_available) -> AsyncGenerator:
     # Drop all tables after test
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
 
 
 @pytest.fixture
@@ -128,14 +120,18 @@ async def test_client(test_db_session, redis_available):
     from httpx import ASGITransport, AsyncClient
     from app.main import app
     from app.core.database import get_db
+    from app.core.redis import redis_client
 
     async def override_get_db():
         yield test_db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    # As with asyncpg, do not reuse Redis transports across pytest event loops.
+    await redis_client.aclose()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
     app.dependency_overrides.clear()
+    await redis_client.aclose()

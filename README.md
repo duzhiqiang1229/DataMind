@@ -53,22 +53,37 @@ DataMind/
 ### 方式一: Docker Compose (推荐)
 
 ```bash
-# 1. 进入 backend 目录
-cd backend
+# 1. 在项目根目录准备生产配置
+cp backend/.env.example backend/.env
+cp openmetadata/.env.example openmetadata/.env
+# 必须设置随机 JWT_SECRET_KEY、有效 Fernet ENCRYPTION_KEY、
+# 强 DB_PASSWORD/REDIS_PASSWORD，以及至少 24 位的随机 EXECUTOR_TOKEN。
+# 同时替换 openmetadata/.env 中的数据库密码、管理员密码和两个 Fernet Key；
+# 两个 Fernet Key 在产生加密数据后必须保持稳定。
+# 首次部署还应设置：
+# BOOTSTRAP_ADMIN=true
+# INITIAL_ADMIN_PASSWORD=<至少 12 位的强密码>
 
-# 2. 复制环境配置文件并修改
-cp .env.example .env
-# 编辑 .env, 设置 JWT_SECRET_KEY 和 ENCRYPTION_KEY
+# 2. 构建并启动。后端入口会自动执行 Alembic 迁移；
+# BOOTSTRAP_ADMIN=true 时会幂等初始化管理员、角色、权限和菜单。
+docker compose -f docker-compose.prod.yml up -d --build
 
-# 3. 启动 PostgreSQL + Redis + Backend
-docker-compose up -d
+# 3. 检查服务
+docker compose -f docker-compose.prod.yml ps
+# 前端: http://localhost/
+# 健康检查: http://localhost:8000/health
 
-# 4. 初始化种子数据 (admin 用户、角色、权限、菜单)
-docker exec datamind-backend python -m app.seed_data
-
-# 5. 访问 API 文档
-# http://localhost:8000/docs
+# 4. OpenMetadata 已包含在主 Compose 中，无需启动第二个项目。
+# 首次启动会额外下载较大的 OpenMetadata 官方镜像。
+# OpenMetadata: http://localhost:8585
+# 启动后在「系统管理 → 组件配置」中保存 Bot JWT Token。
 ```
+
+OpenMetadata 与 DataMind 共用同一个 PostgreSQL 实例，但分别使用 `openmetadata_db`、
+`airflow_db` 和 `datamind` 三个独立数据库；首次启动会自动创建前两个数据库及专用账号。
+Elasticsearch 继续提供资产搜索、筛选和聚合。
+当前单机配置用于试运行；生产环境应参照官方容量要求拆分部署、轮换管理员和 JWT 密钥，
+并为 DataMind 配置最小权限 Bot。
 
 ### 方式二: 本地开发
 
@@ -161,12 +176,11 @@ pytest -m ""
 pytest --cov=app --cov-report=term-missing
 ```
 
-## 默认账号
+## 初始管理员
 
-种子数据创建的管理员账号:
-
-- 用户名: `admin`
-- 密码: `admin123`
+生产环境不再提供默认密码。首次启动前，在 `backend/.env` 中设置
+`BOOTSTRAP_ADMIN=true`、`INITIAL_ADMIN_USERNAME` 和至少 12 位的
+`INITIAL_ADMIN_PASSWORD`。初始化成功后可将 `BOOTSTRAP_ADMIN` 改回 `false`。
 
 ## 开发计划
 

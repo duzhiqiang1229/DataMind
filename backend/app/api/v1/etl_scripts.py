@@ -5,12 +5,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_role, PaginationParams
 from app.schemas.common import ResponseOK, PageResponse, PageResult
 from app.schemas.etl_script import EtlScriptCreate, EtlScriptUpdate, EtlScriptExecute
 from app.services import etl_script_service
 
 router = APIRouter()
+engineer_only = [Depends(require_role("data_engineer"))]
 
 
 @router.get("", response_model=PageResponse[dict], summary="ETL 脚本列表")
@@ -27,7 +28,7 @@ async def list_scripts(
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 
 
-@router.post("", response_model=ResponseOK[dict], summary="创建 ETL 脚本")
+@router.post("", response_model=ResponseOK[dict], summary="创建 ETL 脚本", dependencies=engineer_only)
 async def create_script(
     req: EtlScriptCreate,
     db: AsyncSession = Depends(get_db),
@@ -49,7 +50,7 @@ async def get_script(
     return ResponseOK(data=result)
 
 
-@router.put("/{script_id}", response_model=ResponseOK[dict], summary="更新 ETL 脚本")
+@router.put("/{script_id}", response_model=ResponseOK[dict], summary="更新 ETL 脚本", dependencies=engineer_only)
 async def update_script(
     script_id: str,
     req: EtlScriptUpdate,
@@ -62,7 +63,7 @@ async def update_script(
     return ResponseOK(data=result)
 
 
-@router.delete("/{script_id}", response_model=ResponseOK, summary="删除 ETL 脚本")
+@router.delete("/{script_id}", response_model=ResponseOK, summary="删除 ETL 脚本", dependencies=engineer_only)
 async def delete_script(
     script_id: str,
     db: AsyncSession = Depends(get_db),
@@ -74,7 +75,7 @@ async def delete_script(
     return ResponseOK()
 
 
-@router.post("/{script_id}/execute", response_model=ResponseOK[dict], summary="执行 ETL 脚本")
+@router.post("/{script_id}/execute", response_model=ResponseOK[dict], summary="执行 ETL 脚本", dependencies=engineer_only)
 async def execute_script(
     script_id: str,
     req: EtlScriptExecute,
@@ -90,7 +91,7 @@ async def execute_script(
     return ResponseOK(data=result)
 
 
-@router.post("/{script_id}/deploy-schedule", response_model=ResponseOK[dict], summary="部署调度脚本到 Airflow")
+@router.post("/{script_id}/deploy-schedule", response_model=ResponseOK[dict], summary="部署调度脚本到 Airflow", dependencies=engineer_only)
 async def deploy_schedule(
     script_id: str,
     db: AsyncSession = Depends(get_db),

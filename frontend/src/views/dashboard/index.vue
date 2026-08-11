@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, shallowRef } from "vue";
-import * as echarts from "echarts";
+import * as echarts from "@/utils/echarts";
 import { dashboardApi } from "@/api";
 import { formatRunId } from "@/utils/format";
 

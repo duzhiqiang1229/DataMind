@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, PaginationParams
+from app.core.dependencies import get_current_user, require_permission, PaginationParams
 from app.schemas.datax_task import (
     DataXTaskCreate, DataXTaskUpdate, DataXTaskResponse,
     DataXTaskTrigger, TaskInstanceResponse, TaskLogResponse,
@@ -25,7 +25,10 @@ async def list_datax_tasks(
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 
 
-@router.post("", response_model=ResponseOK[dict], summary="创建DataX任务")
+@router.post(
+    "", response_model=ResponseOK[dict], summary="创建DataX任务",
+    dependencies=[Depends(require_permission("datax:task:create"))],
+)
 async def create_datax_task(
     req: DataXTaskCreate,
     db: AsyncSession = Depends(get_db),
@@ -47,7 +50,10 @@ async def get_datax_task(task_id: str, db: AsyncSession = Depends(get_db), user=
     return ResponseOK(data=result)
 
 
-@router.put("/{task_id}", response_model=ResponseOK[dict], summary="更新任务")
+@router.put(
+    "/{task_id}", response_model=ResponseOK[dict], summary="更新任务",
+    dependencies=[Depends(require_permission("datax:task:update"))],
+)
 async def update_datax_task(
     task_id: str,
     req: DataXTaskUpdate,
@@ -61,7 +67,10 @@ async def update_datax_task(
     return ResponseOK(data=result)
 
 
-@router.delete("/{task_id}", response_model=ResponseOK, summary="删除任务")
+@router.delete(
+    "/{task_id}", response_model=ResponseOK, summary="删除任务",
+    dependencies=[Depends(require_permission("datax:task:delete"))],
+)
 async def delete_datax_task(task_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     import uuid
     ok = await datax_task_service.delete_task(db, uuid.UUID(task_id))
@@ -70,7 +79,10 @@ async def delete_datax_task(task_id: str, db: AsyncSession = Depends(get_db), us
     return ResponseOK()
 
 
-@router.post("/{task_id}/trigger", response_model=ResponseOK[dict], summary="触发任务执行")
+@router.post(
+    "/{task_id}/trigger", response_model=ResponseOK[dict], summary="触发任务执行",
+    dependencies=[Depends(require_permission("datax:task:execute"))],
+)
 async def trigger_datax_task(
     task_id: str,
     req: DataXTaskTrigger = DataXTaskTrigger(),
@@ -85,7 +97,10 @@ async def trigger_datax_task(
         return ResponseOK(code=404, message=str(e))
 
 
-@router.post("/{task_id}/pause", response_model=ResponseOK, summary="暂停定时调度")
+@router.post(
+    "/{task_id}/pause", response_model=ResponseOK, summary="暂停定时调度",
+    dependencies=[Depends(require_permission("datax:task:update"))],
+)
 async def pause_datax_task(task_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     import uuid
     ok = await datax_task_service.pause_task(db, uuid.UUID(task_id))
@@ -94,7 +109,10 @@ async def pause_datax_task(task_id: str, db: AsyncSession = Depends(get_db), use
     return ResponseOK()
 
 
-@router.post("/{task_id}/resume", response_model=ResponseOK, summary="恢复定时调度")
+@router.post(
+    "/{task_id}/resume", response_model=ResponseOK, summary="恢复定时调度",
+    dependencies=[Depends(require_permission("datax:task:update"))],
+)
 async def resume_datax_task(task_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     import uuid
     ok = await datax_task_service.resume_task(db, uuid.UUID(task_id))
