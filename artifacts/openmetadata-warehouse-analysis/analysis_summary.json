@@ -1,0 +1,1025 @@
+{
+  "generatedAt": "2026-08-11T04:55:39.227906+00:00",
+  "sourceGeneratedAt": "2026-08-11T04:51:28.830948+00:00",
+  "assetSummary": {
+    "totalAssets": 63,
+    "counts": {
+      "table": 62,
+      "dashboard": 0,
+      "pipeline": 1,
+      "topic": 0,
+      "mlmodel": 0,
+      "container": 0
+    },
+    "coverage": {
+      "description": 100,
+      "owners": 2,
+      "tags": 0,
+      "domains": 100
+    },
+    "quality": {
+      "total": 0,
+      "statuses": {
+        "Success": 0,
+        "Failed": 0,
+        "Aborted": 0
+      }
+    },
+    "sampledTables": 62
+  },
+  "layerRows": [
+    {
+      "layer": "ODS",
+      "tables": 28,
+      "columns": 295,
+      "avg_columns": 10.5,
+      "with_owner": 28,
+      "with_tags": 0,
+      "with_tests": 0,
+      "with_profile": 0
+    },
+    {
+      "layer": "DIM",
+      "tables": 14,
+      "columns": 98,
+      "avg_columns": 7.0,
+      "with_owner": 14,
+      "with_tags": 0,
+      "with_tests": 0,
+      "with_profile": 0
+    },
+    {
+      "layer": "DWD",
+      "tables": 10,
+      "columns": 255,
+      "avg_columns": 25.5,
+      "with_owner": 10,
+      "with_tags": 0,
+      "with_tests": 0,
+      "with_profile": 0
+    },
+    {
+      "layer": "DWS",
+      "tables": 9,
+      "columns": 133,
+      "avg_columns": 14.8,
+      "with_owner": 9,
+      "with_tags": 0,
+      "with_tests": 0,
+      "with_profile": 0
+    },
+    {
+      "layer": "ADS",
+      "tables": 1,
+      "columns": 10,
+      "avg_columns": 10.0,
+      "with_owner": 1,
+      "with_tags": 0,
+      "with_tests": 0,
+      "with_profile": 0
+    }
+  ],
+  "layerTables": {
+    "ADS": [
+      "ads_cash_flow_daily_report_df"
+    ],
+    "DIM": [
+      "dim_charge_mode",
+      "dim_community",
+      "dim_cost_item",
+      "dim_cost_standard",
+      "dim_customer",
+      "dim_customer_live_scd",
+      "dim_date",
+      "dim_fee",
+      "dim_incident_type",
+      "dim_inspection_level",
+      "dim_inspection_plan",
+      "dim_parking",
+      "dim_pub_districtname_f_d",
+      "dim_room"
+    ],
+    "DWD": [
+      "dwd_cp_task_df",
+      "dwd_cp_taskpoint_df",
+      "dwd_fee_fees_df",
+      "dwd_fee_feesdetail_df",
+      "dwd_fee_offsetpredetail_df",
+      "dwd_fee_precosts_df",
+      "dwd_fee_precostsdetail_df",
+      "dwd_fee_refundfees_df",
+      "dwd_incident_accept_df",
+      "dwd_incident_reply_df"
+    ],
+    "DWS": [
+      "dws_cp_point_daily_df",
+      "dws_cp_task_daily_df",
+      "dws_fee_arrears_daily_df",
+      "dws_fee_received_arrears_daily_df",
+      "dws_fee_received_daily_df",
+      "dws_fee_refund_daily_df",
+      "dws_incident_reply_daily_df",
+      "dws_incident_summary_daily_df",
+      "dws_occupancy_daily_df"
+    ],
+    "ODS": [
+      "ods_cdzapi_cdorders_i_d",
+      "ods_cdzapi_chargeOrderWeekStatistics_i_d",
+      "ods_cdzapi_czorders_i_d",
+      "ods_cdzapi_dev_f_d",
+      "ods_cdzapi_devportreal_f_d",
+      "ods_cdzapi_users_i_d",
+      "ods_erp_tb_cp_plan_f_d",
+      "ods_erp_tb_cp_task_f_d",
+      "ods_erp_tb_cp_tasklevel_f_d",
+      "ods_erp_tb_cp_taskpoint_f_d",
+      "ods_erp_tb_cp_taskpointincident_f_d",
+      "ods_erp_tb_dictionary_chargemode_f_d",
+      "ods_erp_tb_hspr_building_f_d",
+      "ods_erp_tb_hspr_corpincidenttype_f_d",
+      "ods_erp_tb_hspr_costitem_f_d",
+      "ods_erp_tb_hspr_coststandard_f_d",
+      "ods_erp_tb_hspr_customer_f_d",
+      "ods_erp_tb_hspr_customerlive_f_d",
+      "ods_erp_tb_hspr_fees_f_d",
+      "ods_erp_tb_hspr_feesdetail_f_d",
+      "ods_erp_tb_hspr_incidentaccept_f_d",
+      "ods_erp_tb_hspr_incidentreply_f_d",
+      "ods_erp_tb_hspr_offsetpredetail_f_d",
+      "ods_erp_tb_hspr_parking_f_d",
+      "ods_erp_tb_hspr_precosts_f_d",
+      "ods_erp_tb_hspr_precostsdetail_f_d",
+      "ods_erp_tb_hspr_refundfees_f_d",
+      "ods_erp_tb_hspr_room_f_d"
+    ]
+  },
+  "pipeline": {
+    "name": "datamind_airflow.etl_dim_to_ads",
+    "description": "ETL: dim (Doris SQL) -> dwd (PySpark) -> dws (PySpark) -> ads (PySpark)",
+    "scheduleInterval": "0 7 * * *",
+    "tasks": 29,
+    "operatorCounts": {
+      "SparkSubmitOperator": 20,
+      "SQLExecuteQueryOperator": 9
+    },
+    "taskDependencyEdges": 28,
+    "upstreamNodes": 38,
+    "downstreamNodes": 27,
+    "uniqueLineagePairs": 119,
+    "rawLineageRecords": 442,
+    "columnLineageMappings": 538,
+    "uniqueColumnLineageMappings": 69,
+    "edgesWithColumnLineage": 82,
+    "openLineageTasksObserved": 27,
+    "missingOpenLineageTasks": [
+      "dwd_fee_feesdetail_df",
+      "dwd_fee_offsetpredetail_df"
+    ],
+    "longestTaskPathLength": 29,
+    "longestTaskPath": [
+      "dim_cost_item",
+      "dim_cost_standard",
+      "dim_customer",
+      "dim_customer_live_scd",
+      "dim_fee",
+      "dim_incident_type",
+      "dim_inspection_plan",
+      "dim_parking",
+      "dim_room",
+      "dwd_fee_fees_df",
+      "dwd_fee_feesdetail_df",
+      "dwd_fee_offsetpredetail_df",
+      "dwd_fee_precostsdetail_df",
+      "dwd_fee_refundfees_df",
+      "dwd_fee_precosts_df",
+      "dwd_incident_accept_df",
+      "dwd_incident_reply_df",
+      "dwd_cp_task_df",
+      "dwd_cp_taskpoint_df",
+      "dws_fee_arrears_daily_df",
+      "dws_fee_received_daily_df",
+      "dws_fee_received_arrears_daily_df",
+      "dws_fee_refund_daily_df",
+      "dws_occupancy_daily_df",
+      "dws_cp_point_daily_df",
+      "dws_cp_task_daily_df",
+      "dws_incident_reply_daily_df",
+      "dws_incident_summary_daily_df",
+      "ads_cash_flow_daily_report_df"
+    ],
+    "maxTaskFanOut": 1,
+    "tasksWithFanOut": 0,
+    "usedOdsTables": 17,
+    "unusedOdsTables": [
+      "ods_cdzapi_cdorders_i_d",
+      "ods_cdzapi_chargeOrderWeekStatistics_i_d",
+      "ods_cdzapi_czorders_i_d",
+      "ods_cdzapi_dev_f_d",
+      "ods_cdzapi_devportreal_f_d",
+      "ods_cdzapi_users_i_d",
+      "ods_erp_tb_cp_tasklevel_f_d",
+      "ods_erp_tb_cp_taskpointincident_f_d",
+      "ods_erp_tb_dictionary_chargemode_f_d",
+      "ods_erp_tb_hspr_feesdetail_f_d",
+      "ods_erp_tb_hspr_offsetpredetail_f_d"
+    ],
+    "servedDwsTables": [
+      "dws_fee_received_daily_df"
+    ]
+  },
+  "jobLineage": [
+    {
+      "task": "ads_cash_flow_daily_report_df",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "DWS",
+      "output_layers": "ADS",
+      "input_tables": [
+        "dws_fee_received_daily_df"
+      ],
+      "output_tables": [
+        "ads_cash_flow_daily_report_df"
+      ]
+    },
+    {
+      "task": "dim_cost_item",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_hspr_costitem_f_d"
+      ],
+      "output_tables": [
+        "dim_cost_item"
+      ]
+    },
+    {
+      "task": "dim_cost_standard",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_hspr_coststandard_f_d"
+      ],
+      "output_tables": [
+        "dim_cost_standard"
+      ]
+    },
+    {
+      "task": "dim_customer",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_hspr_customer_f_d"
+      ],
+      "output_tables": [
+        "dim_customer"
+      ]
+    },
+    {
+      "task": "dim_customer_live_scd",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_hspr_customerlive_f_d"
+      ],
+      "output_tables": [
+        "dim_customer_live_scd"
+      ]
+    },
+    {
+      "task": "dim_fee",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_hspr_fees_f_d"
+      ],
+      "output_tables": [
+        "dim_fee"
+      ]
+    },
+    {
+      "task": "dim_incident_type",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_hspr_corpincidenttype_f_d"
+      ],
+      "output_tables": [
+        "dim_incident_type"
+      ]
+    },
+    {
+      "task": "dim_inspection_plan",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_cp_plan_f_d"
+      ],
+      "output_tables": [
+        "dim_inspection_plan"
+      ]
+    },
+    {
+      "task": "dim_parking",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_hspr_parking_f_d"
+      ],
+      "output_tables": [
+        "dim_parking"
+      ]
+    },
+    {
+      "task": "dim_room",
+      "inputs": 2,
+      "outputs": 1,
+      "input_layers": "ODS",
+      "output_layers": "DIM",
+      "input_tables": [
+        "ods_erp_tb_hspr_building_f_d",
+        "ods_erp_tb_hspr_room_f_d"
+      ],
+      "output_tables": [
+        "dim_room"
+      ]
+    },
+    {
+      "task": "dwd_cp_task_df",
+      "inputs": 4,
+      "outputs": 1,
+      "input_layers": "DIM, ODS",
+      "output_layers": "DWD",
+      "input_tables": [
+        "dim_community",
+        "dim_inspection_level",
+        "dim_inspection_plan",
+        "ods_erp_tb_cp_task_f_d"
+      ],
+      "output_tables": [
+        "dwd_cp_task_df"
+      ]
+    },
+    {
+      "task": "dwd_cp_taskpoint_df",
+      "inputs": 2,
+      "outputs": 1,
+      "input_layers": "DIM, ODS",
+      "output_layers": "DWD",
+      "input_tables": [
+        "dim_community",
+        "ods_erp_tb_cp_taskpoint_f_d"
+      ],
+      "output_tables": [
+        "dwd_cp_taskpoint_df"
+      ]
+    },
+    {
+      "task": "dwd_fee_fees_df",
+      "inputs": 7,
+      "outputs": 1,
+      "input_layers": "DIM, ODS",
+      "output_layers": "DWD",
+      "input_tables": [
+        "dim_community",
+        "dim_cost_item",
+        "dim_cost_standard",
+        "dim_customer",
+        "dim_parking",
+        "dim_room",
+        "ods_erp_tb_hspr_fees_f_d"
+      ],
+      "output_tables": [
+        "dwd_fee_fees_df"
+      ]
+    },
+    {
+      "task": "dwd_fee_precosts_df",
+      "inputs": 4,
+      "outputs": 1,
+      "input_layers": "DIM, ODS",
+      "output_layers": "DWD",
+      "input_tables": [
+        "dim_community",
+        "dim_customer",
+        "dim_room",
+        "ods_erp_tb_hspr_precosts_f_d"
+      ],
+      "output_tables": [
+        "dwd_fee_precosts_df"
+      ]
+    },
+    {
+      "task": "dwd_fee_precostsdetail_df",
+      "inputs": 6,
+      "outputs": 1,
+      "input_layers": "DIM, ODS",
+      "output_layers": "DWD",
+      "input_tables": [
+        "dim_community",
+        "dim_cost_item",
+        "dim_customer",
+        "dim_fee",
+        "dim_room",
+        "ods_erp_tb_hspr_precostsdetail_f_d"
+      ],
+      "output_tables": [
+        "dwd_fee_precostsdetail_df"
+      ]
+    },
+    {
+      "task": "dwd_fee_refundfees_df",
+      "inputs": 6,
+      "outputs": 1,
+      "input_layers": "DIM, ODS",
+      "output_layers": "DWD",
+      "input_tables": [
+        "dim_community",
+        "dim_cost_item",
+        "dim_customer",
+        "dim_fee",
+        "dim_room",
+        "ods_erp_tb_hspr_refundfees_f_d"
+      ],
+      "output_tables": [
+        "dwd_fee_refundfees_df"
+      ]
+    },
+    {
+      "task": "dwd_incident_accept_df",
+      "inputs": 5,
+      "outputs": 1,
+      "input_layers": "DIM, ODS",
+      "output_layers": "DWD",
+      "input_tables": [
+        "dim_community",
+        "dim_customer",
+        "dim_incident_type",
+        "dim_room",
+        "ods_erp_tb_hspr_incidentaccept_f_d"
+      ],
+      "output_tables": [
+        "dwd_incident_accept_df"
+      ]
+    },
+    {
+      "task": "dwd_incident_reply_df",
+      "inputs": 2,
+      "outputs": 1,
+      "input_layers": "DIM, ODS",
+      "output_layers": "DWD",
+      "input_tables": [
+        "dim_community",
+        "ods_erp_tb_hspr_incidentreply_f_d"
+      ],
+      "output_tables": [
+        "dwd_incident_reply_df"
+      ]
+    },
+    {
+      "task": "dws_cp_point_daily_df",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "DWD",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dwd_cp_taskpoint_df"
+      ],
+      "output_tables": [
+        "dws_cp_point_daily_df"
+      ]
+    },
+    {
+      "task": "dws_cp_task_daily_df",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "DWD",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dwd_cp_task_df"
+      ],
+      "output_tables": [
+        "dws_cp_task_daily_df"
+      ]
+    },
+    {
+      "task": "dws_fee_arrears_daily_df",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "DWD",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dwd_fee_fees_df"
+      ],
+      "output_tables": [
+        "dws_fee_arrears_daily_df"
+      ]
+    },
+    {
+      "task": "dws_fee_received_arrears_daily_df",
+      "inputs": 3,
+      "outputs": 1,
+      "input_layers": "DWD",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dwd_fee_feesdetail_df",
+        "dwd_fee_offsetpredetail_df",
+        "dwd_fee_precostsdetail_df"
+      ],
+      "output_tables": [
+        "dws_fee_received_arrears_daily_df"
+      ]
+    },
+    {
+      "task": "dws_fee_received_daily_df",
+      "inputs": 2,
+      "outputs": 1,
+      "input_layers": "DWD",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dwd_fee_feesdetail_df",
+        "dwd_fee_precostsdetail_df"
+      ],
+      "output_tables": [
+        "dws_fee_received_daily_df"
+      ]
+    },
+    {
+      "task": "dws_fee_refund_daily_df",
+      "inputs": 2,
+      "outputs": 1,
+      "input_layers": "DWD",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dwd_fee_precostsdetail_df",
+        "dwd_fee_refundfees_df"
+      ],
+      "output_tables": [
+        "dws_fee_refund_daily_df"
+      ]
+    },
+    {
+      "task": "dws_incident_reply_daily_df",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "DWD",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dwd_incident_reply_df"
+      ],
+      "output_tables": [
+        "dws_incident_reply_daily_df"
+      ]
+    },
+    {
+      "task": "dws_incident_summary_daily_df",
+      "inputs": 1,
+      "outputs": 1,
+      "input_layers": "DWD",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dwd_incident_accept_df"
+      ],
+      "output_tables": [
+        "dws_incident_summary_daily_df"
+      ]
+    },
+    {
+      "task": "dws_occupancy_daily_df",
+      "inputs": 3,
+      "outputs": 1,
+      "input_layers": "DIM",
+      "output_layers": "DWS",
+      "input_tables": [
+        "dim_community",
+        "dim_customer_live_scd",
+        "dim_room"
+      ],
+      "output_tables": [
+        "dws_occupancy_daily_df"
+      ]
+    }
+  ],
+  "governance": {
+    "domains": [
+      {
+        "name": "ERP",
+        "displayName": "ERP"
+      },
+      {
+        "name": "收入域",
+        "displayName": "收入域"
+      }
+    ],
+    "dataProducts": 0,
+    "glossaries": 0,
+    "glossaryTerms": 0,
+    "classifications": [
+      "AirflowTags",
+      "Certification",
+      "PersonalData",
+      "PII",
+      "Tier"
+    ],
+    "ownedTables": [
+      {
+        "table": "数据仓库.数据仓库.ads.ads_cash_flow_daily_report_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_charge_mode",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_community",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_cost_item",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_cost_standard",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_customer",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_customer_live_scd",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_date",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_fee",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_incident_type",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_inspection_level",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_inspection_plan",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_parking",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_pub_districtname_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dim.dim_room",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_cp_task_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_cp_taskpoint_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_fee_fees_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_fee_feesdetail_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_fee_offsetpredetail_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_fee_precosts_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_fee_precostsdetail_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_fee_refundfees_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_incident_accept_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dwd.dwd_incident_reply_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_cp_point_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_cp_task_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_fee_arrears_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_fee_received_arrears_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_fee_received_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_fee_refund_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_incident_reply_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_incident_summary_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.dws.dws_occupancy_daily_df",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_cdzapi_cdorders_i_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_cdzapi_chargeOrderWeekStatistics_i_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_cdzapi_czorders_i_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_cdzapi_dev_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_cdzapi_devportreal_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_cdzapi_users_i_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_cp_plan_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_cp_task_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_cp_tasklevel_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_cp_taskpoint_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_cp_taskpointincident_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_dictionary_chargemode_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_building_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_corpincidenttype_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_costitem_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_coststandard_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_customer_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_customerlive_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_fees_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_feesdetail_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_incidentaccept_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_incidentreply_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_offsetpredetail_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_parking_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_precosts_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_precostsdetail_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_refundfees_f_d",
+        "owners": [
+          "admin"
+        ]
+      },
+      {
+        "table": "数据仓库.数据仓库.ods.ods_erp_tb_hspr_room_f_d",
+        "owners": [
+          "admin"
+        ]
+      }
+    ]
+  },
+  "metadataHealth": {
+    "describedTables": 62,
+    "ownedTables": 62,
+    "taggedTables": 0,
+    "domainAssignedTables": 62,
+    "profiledTables": 0,
+    "testedTables": 0,
+    "partitionedTables": 51,
+    "constrainedTables": 0,
+    "totalColumns": 791
+  }
+}

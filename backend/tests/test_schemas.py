@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshTokenRequest
 from app.schemas.common import ResponseOK, PageResult
+from app.schemas.data_model import DataModelCreate
 
 
 class TestLoginRequest:
@@ -83,3 +84,29 @@ class TestPageResult:
     def test_create_with_zero_items(self):
         result = PageResult.create(items=[], total=0, page=1, page_size=10)
         assert result.total_pages == 0
+
+
+class TestDataModelCreate:
+    def test_dim_layer_is_supported(self):
+        model = DataModelCreate(
+            model_name="客户维度",
+            layer="dim",
+            database="dim",
+            table_name="dim_customer",
+            data_domain="客户入住域",
+            business_domain="客户档案维护",
+            model_grain="每个客户一条记录",
+            update_strategy="full_merge",
+            source_tables=["ods_customer"],
+        )
+        assert model.layer == "dim"
+        assert model.source_tables == ["ods_customer"]
+
+    def test_unknown_layer_is_rejected(self):
+        with pytest.raises(ValidationError):
+            DataModelCreate(
+                model_name="Bad layer",
+                layer="stg",
+                database="stg",
+                table_name="bad_layer",
+            )

@@ -317,9 +317,8 @@ async def retry_dag_run(
 ) -> dict:
     """Retry a failed task instance within a DAG run.
 
-    Airflow does not expose a dedicated retry endpoint. The approach is to
-    clear the task instance state by sending ``PATCH`` with
-    ``{"state": "none"}``. Once cleared, the Airflow scheduler picks the
+    Clear the selected failed task through Airflow's stable
+    ``clearTaskInstances`` endpoint. Once cleared, the scheduler picks the
     task up and re-executes it.
 
     Args:
@@ -345,11 +344,19 @@ async def retry_dag_run(
 
     try:
         client = await get_airflow_client(db)
-        # Clear the task instance state so the scheduler re-runs it.
+        # Airflow 2.x only accepts success/failed/skipped in the single-task
+        # state endpoint. Retrying must use the dedicated clear endpoint.
         resp = await client._request(
-            "PATCH",
-            f"/api/v1/dags/{dag_id}/dagRuns/{run_id}/taskInstances/{task_id}",
-            json={"state": "none"},
+            "POST",
+            f"/api/v1/dags/{dag_id}/clearTaskInstances",
+            json={
+                "dag_run_id": run_id,
+                "task_ids": [task_id],
+                "only_failed": True,
+                "include_downstream": True,
+                "reset_dag_runs": True,
+                "dry_run": False,
+            },
         )
         detail = resp.json() if resp.content else {}
         result["success"] = True

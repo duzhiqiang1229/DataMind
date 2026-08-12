@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -73,15 +74,22 @@ async def update_business_domain(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    from app.models import BusinessDomain
+    from app.models import BusinessDomain, DataModel
     d = (await db.execute(select(BusinessDomain).where(BusinessDomain.id == uuid.UUID(domain_id)))).scalar_one_or_none()
     if not d:
         return ResponseOK(code=404, message="业务过程不存在")
+    old_name = d.domain_name
     d.domain_name = body.domain_name
     d.domain_code = body.domain_code or body.domain_name
     d.data_domain = body.data_domain
     d.description = body.description
     d.sort_order = body.sort_order
+    if old_name != body.domain_name:
+        await db.execute(
+            DataModel.__table__.update()
+            .where(DataModel.business_domain == old_name)
+            .values(business_domain=body.domain_name)
+        )
     await db.commit()
     await db.refresh(d)
     return ResponseOK(data=_domain_dict(d))
@@ -93,10 +101,15 @@ async def delete_business_domain(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    from app.models import BusinessDomain
+    from app.models import BusinessDomain, DataModel
     d = (await db.execute(select(BusinessDomain).where(BusinessDomain.id == uuid.UUID(domain_id)))).scalar_one_or_none()
     if not d:
         return ResponseOK(code=404, message="业务过程不存在")
+    model_count = (
+        await db.execute(select(func.count(DataModel.id)).where(DataModel.business_domain == d.domain_name))
+    ).scalar_one()
+    if model_count:
+        return ResponseOK(code=400, message=f"仍有 {model_count} 个模型使用该业务过程，不能删除")
     await db.delete(d)
     await db.commit()
     return ResponseOK()
@@ -140,14 +153,26 @@ async def update_data_domain(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    from app.models import DataDomain
+    from app.models import BusinessDomain, DataDomain, DataModel
     d = (await db.execute(select(DataDomain).where(DataDomain.id == uuid.UUID(domain_id)))).scalar_one_or_none()
     if not d:
         return ResponseOK(code=404, message="数据域不存在")
+    old_name = d.domain_name
     d.domain_name = body.domain_name
     d.domain_code = body.domain_code or body.domain_name
     d.description = body.description
     d.sort_order = body.sort_order
+    if old_name != body.domain_name:
+        await db.execute(
+            BusinessDomain.__table__.update()
+            .where(BusinessDomain.data_domain == old_name)
+            .values(data_domain=body.domain_name)
+        )
+        await db.execute(
+            DataModel.__table__.update()
+            .where(DataModel.data_domain == old_name)
+            .values(data_domain=body.domain_name)
+        )
     await db.commit()
     await db.refresh(d)
     return ResponseOK(data=_domain_dict(d))
@@ -159,13 +184,45 @@ async def delete_data_domain(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    from app.models import DataDomain
+    from app.models import BusinessDomain, DataDomain, DataModel
     d = (await db.execute(select(DataDomain).where(DataDomain.id == uuid.UUID(domain_id)))).scalar_one_or_none()
     if not d:
         return ResponseOK(code=404, message="数据域不存在")
+    process_count = (
+        await db.execute(select(func.count(BusinessDomain.id)).where(BusinessDomain.data_domain == d.domain_name))
+    ).scalar_one()
+    model_count = (
+        await db.execute(select(func.count(DataModel.id)).where(DataModel.data_domain == d.domain_name))
+    ).scalar_one()
+    if process_count or model_count:
+        return ResponseOK(
+            code=400,
+            message=f"仍有 {process_count} 个业务过程、{model_count} 个模型使用该数据域，不能删除",
+        )
     await db.delete(d)
     await db.commit()
     return ResponseOK()
+
+
+@router.get("/overview", response_model=ResponseOK[dict], summary="数据建模概览")
+async def modeling_overview(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    from app.models import BusinessDomain, DataDomain, DataModel
+
+    layer_rows = await db.execute(
+        select(DataModel.layer, func.count(DataModel.id)).group_by(DataModel.layer)
+    )
+    return ResponseOK(data={
+        "data_domains": (await db.execute(select(func.count(DataDomain.id)))).scalar_one(),
+        "business_processes": (await db.execute(select(func.count(BusinessDomain.id)))).scalar_one(),
+        "models": (await db.execute(select(func.count(DataModel.id)))).scalar_one(),
+        "external_models": (
+            await db.execute(select(func.count(DataModel.id)).where(DataModel.is_external.is_(True)))
+        ).scalar_one(),
+        "layers": {layer.upper(): count for layer, count in layer_rows.all()},
+    })
 
 
 @router.get("", response_model=PageResponse[dict], summary="数据模型列表")
@@ -175,12 +232,14 @@ async def list_models(
     status: str | None = None,
     business_domain: str | None = None,
     data_domain: str | None = None,
+    keyword: str | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
     items, total = await data_model_service.list_models(
         db, pagination.page, pagination.page_size,
         layer, status, business_domain, data_domain,
+        keyword,
     )
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 

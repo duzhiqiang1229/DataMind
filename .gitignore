@@ -59,6 +59,7 @@ redis_data/
 backups/
 openmetadata/docker-volume/
 openmetadata/.env
+openmetadata/ssh/
 
 # ==============================
 # OS

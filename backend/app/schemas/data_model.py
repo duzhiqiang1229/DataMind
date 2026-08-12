@@ -16,13 +16,18 @@ class DataModelFieldItem(BaseModel):
 class DataModelCreate(BaseModel):
     model_name: str = Field(..., max_length=100)
     model_code: Optional[str] = Field(None, max_length=100, description="模型编码(留空自动生成)")
-    layer: str = Field(..., pattern="^(ods|dwd|dws|ads)$")
+    layer: str = Field(..., pattern="^(ods|dim|dwd|dws|ads)$")
     database: str = Field(..., max_length=50)
     table_name: str = Field(..., max_length=100)
     description: Optional[str] = None
     etl_sql: Optional[str] = None
     business_domain: Optional[str] = Field(None, max_length=50)
     data_domain: Optional[str] = Field(None, max_length=50)
+    model_grain: Optional[str] = Field(None, max_length=300)
+    update_strategy: Optional[str] = Field(None, max_length=30)
+    source_tables: list[str] = Field(default_factory=list)
+    source_fqn: Optional[str] = Field(None, max_length=500)
+    is_external: bool = False
     fields: list[DataModelFieldItem] = Field(default_factory=list)
 
 
@@ -32,6 +37,9 @@ class DataModelUpdate(BaseModel):
     etl_sql: Optional[str] = None
     business_domain: Optional[str] = None
     data_domain: Optional[str] = None
+    model_grain: Optional[str] = None
+    update_strategy: Optional[str] = None
+    source_tables: Optional[list[str]] = None
     status: Optional[str] = None
     fields: Optional[list[DataModelFieldItem]] = None
 

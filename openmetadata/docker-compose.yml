@@ -535,6 +535,44 @@ services:
       - ingestion-volume-dags:/opt/airflow/dags
       - ingestion-volume-tmp:/tmp
 
+  openlineage-tunnel:
+    container_name: openlineage-tunnel
+    build:
+      context: ./openlineage-tunnel
+    restart: unless-stopped
+    depends_on:
+      openlineage-relay:
+        condition: service_healthy
+    environment:
+      OPENLINEAGE_SSH_HOST: ${OPENLINEAGE_SSH_HOST:-192.168.1.4}
+      OPENLINEAGE_SSH_USER: ${OPENLINEAGE_SSH_USER:-root}
+    networks:
+      - app_net
+      - default
+    volumes:
+      - ./ssh/openlineage_tunnel_ed25519:/run/ssh/openlineage_tunnel_ed25519:ro
+
+  openlineage-relay:
+    container_name: openlineage-relay
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      openmetadata-server:
+        condition: service_healthy
+    expose:
+      - 8587
+    networks:
+      - app_net
+      - default
+    volumes:
+      - ./openlineage-relay.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./ssh/openlineage-auth.conf:/run/secrets/openlineage-auth.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8587/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
 networks:
   app_net:
     name: datamind-openmetadata_app_net

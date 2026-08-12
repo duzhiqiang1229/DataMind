@@ -1,8 +1,8 @@
 <template>
   <div class="dashboard">
-    <!-- Row 1: 4 统计卡片 -->
+    <!-- Row 1: 5 统计卡片 -->
     <el-row :gutter="16" class="stats-row">
-      <el-col :span="6" v-for="card in statCards" :key="card.title">
+      <el-col :span="6" class="stat-col" v-for="card in statCards" :key="card.title">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-card-inner">
             <div class="stat-icon" :style="{ background: card.gradient }">
@@ -63,7 +63,7 @@
 <script setup lang="ts">
 import { ref, onMounted, shallowRef } from "vue";
 import * as echarts from "@/utils/echarts";
-import { dashboardApi } from "@/api";
+import { dashboardApi, openmetadataApi } from "@/api";
 import { formatRunId } from "@/utils/format";
 
 type TagType = "primary" | "success" | "warning" | "info" | "danger";
@@ -76,6 +76,7 @@ interface StatCard {
 }
 
 const statCards = ref<StatCard[]>([
+  { title: "资产总数", value: 0, icon: "Collection", gradient: "linear-gradient(135deg, #7c3aed, #a78bfa)" },
   { title: "数据源", value: 0, icon: "Coin", gradient: "linear-gradient(135deg, #4366e5, #6c8aff)" },
   { title: "调度任务", value: "", icon: "Sort", gradient: "linear-gradient(135deg, #22c55e, #4ade80)" },
   { title: "指标数", value: 0, icon: "DataAnalysis", gradient: "linear-gradient(135deg, #f59e0b, #fbbf24)" },
@@ -87,16 +88,20 @@ const trendChartRef = ref<HTMLElement>();
 const chartInstance = shallowRef<echarts.ECharts>();
 
 onMounted(async () => {
+  openmetadataApi.summary()
+    .then((summary: any) => { statCards.value[0].value = summary?.totalAssets || 0; })
+    .catch(() => { statCards.value[0].value = 0; });
+
   try {
     const [stats, tasks] = await Promise.all([
       dashboardApi.stats(),
       dashboardApi.recentTasks(10),
     ]);
 
-    statCards.value[0].value = stats.total_datasources || 0;
-    statCards.value[1].value = `${stats.schedule_task_count || 0} / ${stats.today_executions || 0}`;
-    statCards.value[2].value = stats.published_metrics_count || 0;
-    statCards.value[3].value = stats.api_service_count || 0;
+    statCards.value[1].value = stats.total_datasources || 0;
+    statCards.value[2].value = `${stats.schedule_task_count || 0} / ${stats.today_executions || 0}`;
+    statCards.value[3].value = stats.published_metrics_count || 0;
+    statCards.value[4].value = stats.api_service_count || 0;
 
     recentTasks.value = tasks || [];
 
@@ -210,6 +215,11 @@ function statusType(status: string): TagType {
 </script>
 
 <style lang="scss" scoped>
+.stat-col {
+  flex: 0 0 20%;
+  max-width: 20%;
+}
+
 .stat-card {
   :deep(.el-card__body) {
     padding: 20px;

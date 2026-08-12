@@ -127,6 +127,9 @@ export const sparkApi = {
 // Data Model API
 // ============================================================
 export const dataModelApi = {
+  overview() {
+    return request.get("/data-models/overview");
+  },
   list(params: { page: number; page_size: number; keyword?: string; layer?: string; status?: string; business_domain?: string; data_domain?: string }) {
     return request.get("/data-models", { params });
   },

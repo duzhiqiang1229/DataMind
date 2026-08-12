@@ -2,7 +2,7 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from loguru import logger
@@ -15,6 +15,7 @@ async def list_models(
     db: AsyncSession, page: int, page_size: int,
     layer: Optional[str] = None, status: Optional[str] = None,
     business_domain: Optional[str] = None, data_domain: Optional[str] = None,
+    keyword: Optional[str] = None,
 ) -> tuple[list[dict], int]:
     query = select(DataModel).options(selectinload(DataModel.fields))
     count_q = select(func.count(DataModel.id))
@@ -30,10 +31,29 @@ async def list_models(
     if data_domain:
         query = query.where(DataModel.data_domain == data_domain)
         count_q = count_q.where(DataModel.data_domain == data_domain)
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        keyword_filter = or_(
+            DataModel.model_name.ilike(pattern),
+            DataModel.model_code.ilike(pattern),
+            DataModel.table_name.ilike(pattern),
+        )
+        query = query.where(keyword_filter)
+        count_q = count_q.where(keyword_filter)
 
     total = (await db.execute(count_q)).scalar_one()
     result = await db.execute(
-        query.order_by(DataModel.created_at.desc())
+        query.order_by(
+            case(
+                (DataModel.layer == "ods", 1),
+                (DataModel.layer == "dim", 2),
+                (DataModel.layer == "dwd", 3),
+                (DataModel.layer == "dws", 4),
+                (DataModel.layer == "ads", 5),
+                else_=99,
+            ),
+            DataModel.table_name,
+        )
         .offset((page - 1) * page_size).limit(page_size)
     )
     models = result.scalars().all()
@@ -73,6 +93,11 @@ async def create_model(
         etl_sql=req.etl_sql,
         business_domain=req.business_domain,
         data_domain=req.data_domain,
+        model_grain=req.model_grain,
+        update_strategy=req.update_strategy,
+        source_tables=req.source_tables,
+        source_fqn=req.source_fqn,
+        is_external=req.is_external,
         current_version=1,
         status="draft",
         created_by=user_id,
@@ -130,6 +155,12 @@ async def update_model(
         model.business_domain = req.business_domain
     if req.data_domain is not None:
         model.data_domain = req.data_domain
+    if req.model_grain is not None:
+        model.model_grain = req.model_grain
+    if req.update_strategy is not None:
+        model.update_strategy = req.update_strategy
+    if req.source_tables is not None:
+        model.source_tables = req.source_tables
 
     # if fields changed, create a new version
     if req.fields is not None:
@@ -169,11 +200,13 @@ async def delete_model(db: AsyncSession, model_id: uuid.UUID) -> bool:
     model = result.scalar_one_or_none()
     if not model:
         return False
-    # Drop the physical table in Doris first
-    await _execute_on_doris(
-        db,
-        f"DROP TABLE IF EXISTS {model.database}.{model.table_name}"
-    )
+    # Synced models describe existing warehouse tables. Removing the design
+    # record must not remove the physical table from Doris.
+    if not model.is_external:
+        await _execute_on_doris(
+            db,
+            f"DROP TABLE IF EXISTS {model.database}.{model.table_name}"
+        )
     await db.delete(model)
     await db.commit()
     return True
@@ -189,6 +222,8 @@ async def publish_model(db: AsyncSession, model_id: uuid.UUID) -> dict | None:
     model = result.scalar_one_or_none()
     if not model:
         return None
+    if model.is_external:
+        raise ValueError("OpenMetadata 同步模型对应现有物理表，不能在此重复发布建表")
     if not model.fields:
         raise ValueError("模型没有字段，无法生成建表语句")
 
@@ -313,6 +348,11 @@ def _to_dict(m: DataModel, include_versions: bool = False) -> dict:
         "etl_sql": m.etl_sql,
         "business_domain": m.business_domain,
         "data_domain": m.data_domain,
+        "model_grain": m.model_grain,
+        "update_strategy": m.update_strategy,
+        "source_tables": m.source_tables or [],
+        "source_fqn": m.source_fqn,
+        "is_external": m.is_external,
         "status": m.status,
         "current_version": m.current_version,
         "fields": [
