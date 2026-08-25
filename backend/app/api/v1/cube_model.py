@@ -1,12 +1,15 @@
 """Cube 建模接口: 读取/生成/删除 Cube 与 View 模型文件。"""
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
+from app.models import DataSource
 from app.schemas.common import ResponseOK
 from app.services import cube_model_service
+from app.services.cube_deploy_service import sync_cube_datasource
 
 router = APIRouter()
 engineer_only = [Depends(require_role("data_engineer"))]
@@ -45,11 +48,15 @@ async def get_cube(name: str, db: AsyncSession = Depends(get_db), user=Depends(g
 
 @router.post("/cubes", response_model=ResponseOK[dict], summary="保存 Cube", dependencies=engineer_only)
 async def save_cube(body: CubePayload, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+    result = await db.execute(select(DataSource).where(DataSource.source_name == body.data_source))
+    datasource = result.scalar_one_or_none()
+    if not datasource:
+        return ResponseOK(code=400, message=f"数据源「{body.data_source}」不存在")
     try:
         cube = cube_model_service.save_cube(body.model_dump())
     except ValueError as e:
         return ResponseOK(code=400, message=str(e))
-    refresh = await cube_model_service.refresh_cube()
+    refresh = await sync_cube_datasource(db, str(datasource.id))
     return ResponseOK(data={**cube, "refresh": refresh})
 
 

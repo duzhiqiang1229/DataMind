@@ -1,25 +1,48 @@
 # ============================================================
 # DataMind Production Docker Compose
 # Builds frontend, serves via Nginx, runs backend via uvicorn
-# Usage: docker-compose -f docker-compose.prod.yml up -d
+# Usage: docker compose -f docker-compose.prod.yml up -d
 # ============================================================
 name: datamind
 
-# Keep OpenMetadata services in the same Docker Compose project so Docker
-# Desktop shows one `datamind` application with all platform components.
-include:
-  - path: ./openmetadata/docker-compose.yml
-    env_file: ./openmetadata/.env
+x-airflow-common: &airflow-common
+  image: datamind-airflow:${DATAMIND_VERSION:-1.0.0}
+  env_file:
+    - ./.env
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__FERNET_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: ${INITIAL_ADMIN_USERNAME:-admin}:admin
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/config/simple_auth_manager_passwords.json
+    AIRFLOW__CORE__PARALLELISM: "8"
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "4"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${DB_PASSWORD}@postgres:5432/airflow
+    AIRFLOW__API_AUTH__JWT_SECRET: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+    AIRFLOW__API__SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    DATAMIND_API_URL: http://backend:8000
+    TZ: Asia/Shanghai
+  user: "${AIRFLOW_UID:-50000}:0"
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./airflow/config:/opt/airflow/config
+    - ./airflow/scripts:/opt/airflow/scripts:ro
 
 services:
   # PostgreSQL - platform database
   postgres:
     # Keep 15 to match existing data volume (upgrade later via pg_upgrade)
-    image: postgres:15
+    image: postgres@sha256:74e110c41804365e3915fcc09d5e7a1eff50161aaa94d5da0e58e0cd75ae509c
     container_name: postgres
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - ./.env
     entrypoint:
       - /bin/sh
       - -ec
@@ -30,59 +53,22 @@ services:
         exec docker-entrypoint.sh postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${DB_USER}\" -d \"$${DB_NAME}\""]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Idempotently prepare the two OpenMetadata databases in the shared
-  # PostgreSQL instance. This also keeps role passwords in sync on restart.
-  openmetadata-db-init:
-    image: postgres:15
-    container_name: openmetadata-db-init
-    restart: "no"
-    env_file:
-      - ./backend/.env
-      - ./openmetadata/.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-    entrypoint:
-      - /bin/sh
-      - -ec
-    command:
-      - |
-        export PGPASSWORD="$${DB_PASSWORD}"
-        psql --host=postgres --username="$${DB_USER}" --dbname="$${DB_NAME}" \
-          --set=om_user="$${OM_DB_USER}" \
-          --set=om_password="$${OM_DB_PASSWORD}" \
-          --set=om_database="$${OM_DATABASE}" \
-          --set=airflow_user="$${OM_AIRFLOW_DB_USER}" \
-          --set=airflow_password="$${OM_AIRFLOW_DB_PASSWORD}" \
-          --set=airflow_database="$${OM_AIRFLOW_DATABASE}" <<'SQL'
-        SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'om_user', :'om_password')
-        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'om_user') \gexec
-        SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'om_user', :'om_password') \gexec
-        SELECT format('CREATE DATABASE %I OWNER %I', :'om_database', :'om_user')
-        WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'om_database') \gexec
-        SELECT format('ALTER DATABASE %I OWNER TO %I', :'om_database', :'om_user') \gexec
-
-        SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'airflow_user', :'airflow_password')
-        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'airflow_user') \gexec
-        SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'airflow_user', :'airflow_password') \gexec
-        SELECT format('CREATE DATABASE %I OWNER %I', :'airflow_database', :'airflow_user')
-        WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'airflow_database') \gexec
-        SELECT format('ALTER DATABASE %I OWNER TO %I', :'airflow_database', :'airflow_user') \gexec
-        SQL
-
   # Redis - cache + token blacklist
   redis:
-    image: redis:7.2-alpine
+    image: redis@sha256:05a97a479bc73de66f087dc05b569010772880f778cc8671fa6b8aadee32e5c6
     container_name: redis
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - ./.env
     command:
       - /bin/sh
       - -ec
@@ -97,13 +83,14 @@ services:
 
   # Backend - FastAPI
   backend:
+    image: datamind-backend:${DATAMIND_VERSION:-1.0.0}
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
@@ -111,23 +98,28 @@ services:
       - REDIS_PORT=6379
       - APP_DEBUG=false
       - APP_ENV=production
+      - APP_VERSION=${DATAMIND_VERSION:-1.0.0}
       - DATAMIND_IN_DOCKER=true
       - EXECUTOR_URL=http://executor:8010
       - CUBE_COMPOSE_DIR=/datamind
+      - DATAMIND_ENV_FILE=/datamind/.env
       - CUBE_MODEL_CUBES_DIR=/datamind/cube/model/cubes
       - CUBE_MODEL_VIEWS_DIR=/datamind/cube/model/views
-      - AIRFLOW_DAGS_DIR=/opt/airflow/dags
+      - AIRFLOW_DAGS_PATH=/airflow/dags
     ports:
-      - "8000:8000"
+      - "${MANAGEMENT_BIND_ADDRESS:-0.0.0.0}:${BACKEND_PORT:-8000}:8000"
     volumes:
-      - ./airflow-dags:/opt/airflow/dags
       - ./cube:/datamind/cube
+      - ./airflow/dags:/airflow/dags
+      - ./.env:/datamind/.env
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       executor:
+        condition: service_healthy
+      airflow-api-server:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
@@ -138,8 +130,49 @@ services:
       python -m uvicorn app.main:app
       --host 0.0.0.0 --port 8000 --workers 1
 
+  # DataMind MCP - agent-facing Streamable HTTP server.
+  mcp-server:
+    image: datamind-backend:${DATAMIND_VERSION:-1.0.0}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mcp-server
+    restart: unless-stopped
+    entrypoint: []
+    command: >
+      python -m uvicorn app.mcp_main:app
+      --host 0.0.0.0 --port 8001 --workers 1
+    env_file:
+      - ./.env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - APP_DEBUG=false
+      - APP_ENV=production
+      - APP_VERSION=${DATAMIND_VERSION:-1.0.0}
+      - DATAMIND_IN_DOCKER=true
+      - AIRFLOW_DAGS_PATH=/airflow/dags
+      - CUBE_MODEL_CUBES_DIR=/datamind/cube/model/cubes
+      - CUBE_MODEL_VIEWS_DIR=/datamind/cube/model/views
+    ports:
+      - "${MANAGEMENT_BIND_ADDRESS:-0.0.0.0}:${MCP_PORT:-8001}:8001"
+    volumes:
+      - ./cube:/datamind/cube
+      - ./airflow/dags:/airflow/dags
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
   # Restricted executor - the only service allowed to access Docker Engine.
   executor:
+    image: datamind-backend:${DATAMIND_VERSION:-1.0.0}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -150,14 +183,16 @@ services:
       python -m uvicorn app.executor_main:app
       --host 0.0.0.0 --port 8010 --workers 1
     env_file:
-      - ./backend/.env
+      - ./.env
     environment:
       - APP_ENV=production
       - CUBE_COMPOSE_DIR=/datamind
+      - DATAMIND_ENV_FILE=/datamind/.env
     expose:
       - "8010"
     volumes:
       - ./cube:/datamind/cube
+      - ./.env:/datamind/.env
       - /var/run/docker.sock:/var/run/docker.sock
     security_opt:
       - no-new-privileges:true
@@ -169,14 +204,14 @@ services:
 
   # Frontend - Nginx serving built Vue app + API proxy
   frontend:
+    image: datamind-frontend:${DATAMIND_VERSION:-1.0.0}
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: frontend
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "5173:80"
+      - "${DATAMIND_BIND_ADDRESS:-0.0.0.0}:${DATAMIND_HTTP_PORT:-80}:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -188,7 +223,7 @@ services:
 
   # Cube 语义层（模型文件挂载自 ./cube/model）
   cubestore:
-    image: cubejs/cubestore:latest
+    image: cubejs/cubestore@sha256:5955974839b21dd7fbfb5f7bfa2781ae4ba204bdd3f12c16939d728db2755afe
     container_name: cubestore
     restart: unless-stopped
     environment:
@@ -197,40 +232,89 @@ services:
       - cubestore_data:/cube/data
 
   cube:
-    image: cubejs/cube:latest
+    image: cubejs/cube@sha256:4d479d545003bc77f2832d03b14295e72610d088c495060589b2ef9f4310842e
     container_name: cube
     restart: unless-stopped
     ports:
-      - "4000:4000"
+      - "${MANAGEMENT_BIND_ADDRESS:-0.0.0.0}:${CUBE_PORT:-4000}:4000"
     env_file:
-      - ./cube/.env
+      - ./.env
     environment:
+      CUBEJS_API_SECRET: ${CUBE_API_SECRET:?Set CUBE_API_SECRET in .env}
       CUBEJS_CUBESTORE_HOST: cubestore
+      CUBEJS_CUBESTORE_PORT: 3030
     depends_on:
-      cubestore:
-        condition: service_started
+      - cubestore
     volumes:
       - ./cube/model:/cube/conf/model
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/livez').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 12
 
-  # DataX 执行容器（后端通过 docker CLI 动态调用）
-  datax:
+  # Airflow 3.3.1 - API, scheduling and local task execution.
+  airflow-init:
+    <<: *airflow-common
     build:
-      context: ./datax
+      context: ./airflow
       dockerfile: Dockerfile
-    image: datamind-datax:latest
-    container_name: datax
+    container_name: airflow-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["bash", "/opt/airflow/scripts/init.sh"]
+
+  airflow-api-server:
+    <<: *airflow-common
+    container_name: airflow-api-server
     restart: unless-stopped
-    entrypoint: ["tail", "-f", "/dev/null"]
-    volumes:
-      - datax_jobs:/jobs
+    command: api-server
+    ports:
+      - "${MANAGEMENT_BIND_ADDRESS:-0.0.0.0}:${AIRFLOW_PORT:-8082}:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:8080/api/v2/monitor/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    restart: unless-stopped
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\""]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: airflow-dag-processor
+    restart: unless-stopped
+    command: dag-processor
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    container_name: airflow-triggerer
+    restart: unless-stopped
+    command: triggerer
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
   redis_data:
-  datax_jobs:
   cubestore_data:

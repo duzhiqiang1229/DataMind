@@ -23,7 +23,7 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
     if inspector.has_table("users"):
         # Older DataMind deployments created their schema from
-        # database/001_init_schema.sql and may already contain business data.
+        # Earlier installations may already contain business data.
         # Create only missing tables, then reconcile columns added to existing
         # model tables without dropping or rewriting user data.
         from app.core.database import Base

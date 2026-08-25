@@ -42,14 +42,10 @@
           </el-sub-menu>
 
           <!-- 数据开发 -->
-          <el-sub-menu index="/dev">
-            <template #title>
-              <el-icon><EditPen /></el-icon>
-              <span>数据开发</span>
-            </template>
-            <el-menu-item index="/datax">数据集成</el-menu-item>
-            <el-menu-item index="/query">ETL 开发</el-menu-item>
-          </el-sub-menu>
+          <el-menu-item index="/query">
+            <el-icon><EditPen /></el-icon>
+            <span>数据开发</span>
+          </el-menu-item>
 
           <!-- 调度中心 -->
           <el-sub-menu index="/schedule">
@@ -69,7 +65,7 @@
             </template>
             <el-menu-item index="/assets/catalog">数据目录</el-menu-item>
             <el-menu-item index="/assets/lineage">血缘关系</el-menu-item>
-            <el-menu-item index="/assets/steward">数据责任人</el-menu-item>
+            <el-menu-item index="/assets/quality">数据质量</el-menu-item>
           </el-sub-menu>
 
           <!-- 指标中心 -->
@@ -78,16 +74,20 @@
               <el-icon><DataAnalysis /></el-icon>
               <span>指标中心</span>
             </template>
-            <el-menu-item index="/metrics/modeling">Cube 建模</el-menu-item>
+            <el-menu-item index="/metrics/modeling">Cube建模</el-menu-item>
             <el-menu-item index="/metrics/definitions">指标定义</el-menu-item>
             <el-menu-item index="/metrics/query">指标查询</el-menu-item>
           </el-sub-menu>
 
           <!-- 数据服务 -->
-          <el-menu-item index="/data-service">
-            <el-icon><Share /></el-icon>
-            <span>数据服务</span>
-          </el-menu-item>
+          <el-sub-menu index="/data-service">
+            <template #title>
+              <el-icon><Share /></el-icon>
+              <span>数据服务</span>
+            </template>
+            <el-menu-item index="/data-service/catalog">服务目录</el-menu-item>
+            <el-menu-item index="/data-service/stats">调用监控</el-menu-item>
+          </el-sub-menu>
 
           <!-- 系统管理 -->
           <el-sub-menu index="/system">
@@ -98,6 +98,7 @@
             <el-menu-item index="/system/user">用户管理</el-menu-item>
             <el-menu-item index="/system/role">角色管理</el-menu-item>
             <el-menu-item index="/system/component">组件配置</el-menu-item>
+            <el-menu-item index="/system/mcp">MCP管理</el-menu-item>
           </el-sub-menu>
         </el-menu>
       </el-scrollbar>
@@ -188,12 +189,13 @@ function handleSearch() {
   const keyword = searchKeyword.value.trim().toLowerCase();
   if (!keyword) return;
   const menuMap: Record<string, string> = {
-    "数据源": "/datasource", "datax": "/datax", "同步": "/datax",
+    "数据源": "/datasource",
     "sql": "/query", "查询": "/query", "工作台": "/query",
     "模型": "/data-modeling/model", "发布": "/publish", "监控": "/schedule/monitor", "调度": "/schedule/monitor",
     "目录": "/assets/catalog", "血缘": "/assets/lineage",
-    "指标": "/metrics/definitions", "服务": "/data-service", "用户": "/system/user",
-    "角色": "/system/role", "组件": "/system/component", "首页": "/dashboard",
+    "指标": "/metrics/definitions", "服务": "/data-service/catalog",
+    "调用监控": "/data-service/stats", "用户": "/system/user",
+    "角色": "/system/role", "组件": "/system/component", "mcp": "/system/mcp", "智能": "/system/mcp", "首页": "/dashboard",
   };
   for (const [key, path] of Object.entries(menuMap)) {
     if (key.toLowerCase().includes(keyword) || keyword.includes(key.toLowerCase())) {

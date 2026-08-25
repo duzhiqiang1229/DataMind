@@ -1,11 +1,12 @@
 """Metric definition schemas."""
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
 class MetricDefinitionCreate(BaseModel):
     metric_code: Optional[str] = Field(None, max_length=100, description="指标编码(留空系统自动生成)")
     metric_name: str = Field(..., max_length=100)
+    metric_type: Literal["atomic", "derived", "composite"] = Field("atomic", description="指标类型")
     cube_name: Optional[str] = Field(None, max_length=100)
     cube_measure: Optional[str] = Field(None, max_length=200)
     category_id: Optional[str] = None
@@ -20,6 +21,7 @@ class MetricDefinitionCreate(BaseModel):
 
 class MetricDefinitionUpdate(BaseModel):
     metric_name: Optional[str] = None
+    metric_type: Optional[Literal["atomic", "derived", "composite"]] = None
     cube_name: Optional[str] = None
     cube_measure: Optional[str] = None
     category_id: Optional[str] = None

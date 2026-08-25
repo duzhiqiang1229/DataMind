@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>调用统计</span>
+          <span>调用监控</span>
           <div class="header-actions">
             <el-select v-model="statsDays" size="small" style="width: 140px" @change="loadStats">
               <el-option label="近 7 天" :value="7" />
@@ -54,7 +54,7 @@
           <span>最近调用记录</span>
           <el-select
             v-model="selectedApiId"
-            placeholder="选择 API 筛选"
+            placeholder="全部服务"
             clearable
             filterable
             size="small"
@@ -98,7 +98,7 @@ import { ElMessage } from "element-plus";
 import { Refresh } from "@element-plus/icons-vue";
 import { formatDateTime } from "@/utils/format";
 import * as echarts from "@/utils/echarts";
-import { dataServiceLogApi } from "@/api";
+import { dataServiceApi, dataServiceLogApi } from "@/api";
 
 type TagType = "primary" | "success" | "info" | "warning" | "danger";
 
@@ -156,7 +156,7 @@ const loadStats = async () => {
       success: data?.success ?? data?.success_count ?? 0,
       failed: data?.failed ?? data?.failed_count ?? 0,
       avg_elapsed_ms: data?.avg_elapsed_ms ?? data?.avg_elapsed ?? 0,
-      daily: data?.daily ?? data?.trend ?? [],
+      daily: data?.daily ?? data?.daily_trend ?? data?.trend ?? [],
     };
     renderChart();
   } catch {
@@ -207,30 +207,28 @@ const renderChart = async () => {
 };
 
 const loadApiOptions = async () => {
-  // Use callStats or a simple list; fallback to empty list
   try {
-    // Reuse logs endpoint without specific api filter is not available, so derive api options from stats if present
-    if (stats.value.daily && Array.isArray(stats.value.daily)) {
-      // no-op
-    }
-    apiOptions.value = [];
+    const result: any = await dataServiceApi.list({ page: 1, page_size: 100 });
+    apiOptions.value = (result?.items || []).map((item: any) => ({
+      id: item.id,
+      name: item.api_name,
+      path: `${item.api_name} · ${item.api_path}`,
+    }));
   } catch {
     apiOptions.value = [];
   }
 };
 
 const loadLogs = async () => {
-  if (!selectedApiId.value) {
-    logList.value = [];
-    logTotal.value = 0;
-    return;
-  }
   logsLoading.value = true;
   try {
-    const res = await dataServiceLogApi.logs(selectedApiId.value, {
+    const params = {
       page: logPage.value,
       page_size: logPageSize.value,
-    });
+    };
+    const res = selectedApiId.value
+      ? await dataServiceLogApi.logs(selectedApiId.value, params)
+      : await dataServiceLogApi.allLogs(params);
     const data = (res as any)?.data ?? res;
     logList.value = data?.items ?? (Array.isArray(data) ? data : []);
     logTotal.value = data?.total ?? logList.value.length;
@@ -244,7 +242,8 @@ const loadLogs = async () => {
 
 const loadAll = () => {
   loadStats();
-  if (selectedApiId.value) loadLogs();
+  loadApiOptions();
+  loadLogs();
 };
 
 const handleResize = () => {
@@ -254,6 +253,7 @@ const handleResize = () => {
 onMounted(() => {
   loadStats();
   loadApiOptions();
+  loadLogs();
   window.addEventListener("resize", handleResize);
 });
 

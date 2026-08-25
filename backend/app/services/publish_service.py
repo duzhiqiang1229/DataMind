@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from loguru import logger
 
-from app.models import PublishTask, PublishRecord, DataModel, SparkTask, DataXTask
+from app.models import PublishTask, PublishRecord, DataModel
 from app.schemas.publish import PublishTaskCreate
 
 
@@ -99,10 +99,6 @@ async def execute_task(db: AsyncSession, task_id: uuid.UUID) -> dict | None:
         try:
             if task.publish_type == "model":
                 await _publish_model(db, record)
-            elif task.publish_type == "spark_task":
-                await _publish_spark_task(db, record)
-            elif task.publish_type == "datax_task":
-                await _publish_datax_task(db, record)
             record.result = "success"
         except Exception as e:
             record.result = "failed"
@@ -122,14 +118,6 @@ async def _get_source_name(db: AsyncSession, source_type: str, source_id: uuid.U
         result = await db.execute(select(DataModel).where(DataModel.id == source_id))
         m = result.scalar_one_or_none()
         return m.model_name if m else str(source_id)
-    elif source_type == "spark_task":
-        result = await db.execute(select(SparkTask).where(SparkTask.id == source_id))
-        t = result.scalar_one_or_none()
-        return t.task_name if t else str(source_id)
-    elif source_type == "datax_task":
-        result = await db.execute(select(DataXTask).where(DataXTask.id == source_id))
-        t = result.scalar_one_or_none()
-        return t.task_name if t else str(source_id)
     return str(source_id)
 
 
@@ -154,26 +142,6 @@ async def _publish_model(db: AsyncSession, record: PublishRecord):
     if version and version.table_ddl:
         doris.execute_query(version.table_ddl)
         record.source_name = model.model_name
-
-
-async def _publish_spark_task(db: AsyncSession, record: PublishRecord):
-    """Publish a Spark task: set status to active."""
-    result = await db.execute(select(SparkTask).where(SparkTask.id == record.source_id))
-    task = result.scalar_one_or_none()
-    if not task:
-        raise ValueError(f"Spark task {record.source_id} not found")
-    task.status = "active"
-    record.source_name = task.task_name
-
-
-async def _publish_datax_task(db: AsyncSession, record: PublishRecord):
-    """Publish a DataX task: set status to active."""
-    result = await db.execute(select(DataXTask).where(DataXTask.id == record.source_id))
-    task = result.scalar_one_or_none()
-    if not task:
-        raise ValueError(f"DataX task {record.source_id} not found")
-    task.status = "active"
-    record.source_name = task.task_name
 
 
 async def delete_task(db: AsyncSession, task_id: uuid.UUID) -> bool:

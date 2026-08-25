@@ -20,11 +20,12 @@ async def list_definitions(
     pagination: PaginationParams = Depends(),
     keyword: str | None = None,
     category_id: str | None = None,
+    metric_type: str | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
     items, total = await metric_definition_service.list_definitions(
-        db, pagination.page, pagination.page_size, keyword, category_id
+        db, pagination.page, pagination.page_size, keyword, category_id, metric_type
     )
     return PageResponse(data=PageResult.create(items, total, pagination.page, pagination.page_size))
 

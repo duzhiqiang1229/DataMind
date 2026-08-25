@@ -55,6 +55,16 @@ async def get_current_user(
     return user
 
 
+async def get_optional_current_user(
+    db: AsyncSession = Depends(get_db),
+    authorization: Optional[str] = Header(None),
+) -> User | None:
+    """Return the JWT user when supplied, otherwise allow AppKey authentication."""
+    if not authorization:
+        return None
+    return await get_current_user(db=db, authorization=authorization)
+
+
 def require_role(*allowed_roles: str):
     """Require at least one active role; administrators always pass."""
     async def dependency(user: User = Depends(get_current_user)) -> User:

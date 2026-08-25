@@ -8,7 +8,10 @@ COPY . .
 RUN npx vite build
 
 # Stage 2: Nginx serving static files
-FROM nginx:alpine
+# Nginx 1.31 uses a PID-file pwrite path that is incompatible with the
+# CentOS 7 / Linux 3.10 deployment target. Keep the runtime on the last
+# stable branch that supports this kernel generation.
+FROM nginx:1.24-alpine
 
 # Copy built files
 COPY --from=builder /build/dist /usr/share/nginx/html

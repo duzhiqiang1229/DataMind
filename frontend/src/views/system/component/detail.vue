@@ -21,9 +21,6 @@
             <el-button type="success" :icon="Connection" :loading="checking" @click="handleHealthCheck">
               连接测试
             </el-button>
-            <el-button v-if="code === 'airflow'" type="primary" :icon="Upload" :loading="deploying" @click="handleDeployDags">
-              部署 DAG
-            </el-button>
           </div>
         </div>
       </template>
@@ -149,9 +146,9 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage, type FormInstance } from "element-plus";
 import {
   Timer, Coin, DataAnalysis, Files, Switch, Cpu,
-  Connection, Lock, Setting, CircleCheck, InfoFilled, Upload,
+  Connection, Lock, Setting, CircleCheck, InfoFilled,
 } from "@element-plus/icons-vue";
-import { componentApi, airflowApi, datasourceApi } from "@/api";
+import { componentApi, datasourceApi } from "@/api";
 import { formatDateTime } from "@/utils/format";
 import { COMPONENT_SCHEMAS, type ComponentSchema, type FormField } from "./component-schemas";
 
@@ -161,7 +158,6 @@ const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
 const checking = ref(false);
-const deploying = ref(false);
 const config = ref<any>(null);
 const formData = reactive<Record<string, any>>({});
 const datasourceOptions = ref<{ label: string; value: string }[]>([]);
@@ -370,19 +366,6 @@ async function handleHealthCheck() {
     ElMessage.error(e?.message || "连接测试失败");
   } finally {
     checking.value = false;
-  }
-}
-
-async function handleDeployDags() {
-  deploying.value = true;
-  try {
-    const res = await airflowApi.deployDags();
-    const list = (res?.uploaded || []).map((p: string) => p.split("/").pop()).join(", ");
-    ElMessage.success(`DAG 模板已部署到 ${res?.dags_path || ""}（${list}）`);
-  } catch (e: any) {
-    ElMessage.error(e?.message || "部署 DAG 失败");
-  } finally {
-    deploying.value = false;
   }
 }
 

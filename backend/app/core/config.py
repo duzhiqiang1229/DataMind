@@ -15,6 +15,7 @@ class Settings(BaseSettings):
 
     # --- Application ---
     APP_NAME: str = "DataMind"
+    APP_VERSION: str = "1.0.0"
     APP_ENV: str = "development"
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
     INITIAL_ADMIN_PASSWORD: str = ""
     EXECUTOR_URL: str = ""
     EXECUTOR_TOKEN: str = ""
+    LINEAGE_EVENT_TOKEN: str = ""
     CUBE_API_SECRET: str = ""
 
     # --- PostgreSQL ---
@@ -107,6 +109,8 @@ def validate_production_settings() -> None:
         errors.append("INITIAL_ADMIN_PASSWORD must contain at least 12 characters")
     if settings.EXECUTOR_URL and len(settings.EXECUTOR_TOKEN) < 24:
         errors.append("EXECUTOR_TOKEN must contain at least 24 characters")
+    if settings.LINEAGE_EVENT_TOKEN and len(settings.LINEAGE_EVENT_TOKEN) < 24:
+        errors.append("LINEAGE_EVENT_TOKEN must contain at least 24 characters")
     if len(settings.CUBE_API_SECRET) < 24:
         errors.append("CUBE_API_SECRET must contain at least 24 characters")
 

@@ -103,7 +103,6 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
 
     def _extract_module(self, path: str) -> Optional[str]:
         """Extract module name from API path."""
-        # /api/v1/datax-tasks/xxx -> datax
         parts = path.strip("/").split("/")
         if len(parts) >= 3 and parts[0] == "api" and parts[1] == "v1":
             endpoint = parts[2]
@@ -115,15 +114,12 @@ class OperationLogMiddleware(BaseHTTPMiddleware):
                 "menus": "menu",
                 "components": "component",
                 "datasources": "datasource",
-                "datax-tasks": "datax",
-                "spark-tasks": "spark",
                 "doris-query": "doris",
                 "data-models": "model",
                 "publish": "publish",
                 "dashboard": "dashboard",
                 "system": "system",
                 "cube": "cube",
-                "openmetadata": "openmetadata",
             }
             return module_map.get(endpoint, endpoint)
         return None

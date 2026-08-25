@@ -32,6 +32,7 @@ class MetricDefinition(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     metric_code: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     metric_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    metric_type: Mapped[str] = mapped_column(String(20), nullable=False, default="atomic", index=True)
     cube_name: Mapped[str | None] = mapped_column(String(100))
     cube_measure: Mapped[str | None] = mapped_column(String(200))
     category_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -14,7 +14,7 @@ class PublishTask(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     publish_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    publish_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # model/spark_task/datax_task
+    publish_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # model
     source_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)  # list of UUIDs
     target_environment: Mapped[str] = mapped_column(String(20), nullable=False, default="production")
     description: Mapped[str | None] = mapped_column(Text)

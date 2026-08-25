@@ -57,9 +57,8 @@ coverage.xml
 postgres_data/
 redis_data/
 backups/
-openmetadata/docker-volume/
-openmetadata/.env
-openmetadata/ssh/
+airflow/logs/
+airflow/config/simple_auth_manager_passwords.json
 
 # ==============================
 # OS
@@ -77,8 +76,3 @@ logs/
 # Alembic
 # ==============================
 backend/alembic/versions/__pycache__/
-
-# ==============================
-# Workbuddy temp
-# ==============================
-.workbuddy/extracted/

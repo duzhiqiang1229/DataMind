@@ -303,7 +303,10 @@ async def list_databases(db: AsyncSession, ds_id: uuid.UUID) -> list[str]:
     return []
 
 
-async def list_tables(db: AsyncSession, ds_id: uuid.UUID, schema: Optional[str] = None) -> list[dict]:
+async def list_tables(
+    db: AsyncSession, ds_id: uuid.UUID, schema: Optional[str] = None,
+    database: Optional[str] = None,
+) -> list[dict]:
     """List tables in the data source."""
     result = await db.execute(select(DataSource).where(DataSource.id == ds_id))
     ds = result.scalar_one_or_none()
@@ -316,7 +319,7 @@ async def list_tables(db: AsyncSession, ds_id: uuid.UUID, schema: Optional[str] 
         import pymysql
         conn = pymysql.connect(
             host=ds.host, port=ds.port, user=ds.username,
-            password=password, database=ds.database_name or "",
+            password=password, database=database or ds.database_name or "",
             connect_timeout=10,
         )
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -328,7 +331,7 @@ async def list_tables(db: AsyncSession, ds_id: uuid.UUID, schema: Optional[str] 
         import psycopg2
         conn = psycopg2.connect(
             host=ds.host, port=ds.port, user=ds.username,
-            password=password, dbname=ds.database_name or "",
+            password=password, dbname=database or ds.database_name or "",
             connect_timeout=10,
         )
         cursor = conn.cursor()
@@ -343,7 +346,8 @@ async def list_tables(db: AsyncSession, ds_id: uuid.UUID, schema: Optional[str] 
 
 
 async def get_table_columns(
-    db: AsyncSession, ds_id: uuid.UUID, table_name: str, schema: Optional[str] = None
+    db: AsyncSession, ds_id: uuid.UUID, table_name: str, schema: Optional[str] = None,
+    database: Optional[str] = None,
 ) -> list[dict]:
     """Get column definitions of a table."""
     result = await db.execute(select(DataSource).where(DataSource.id == ds_id))
@@ -357,7 +361,7 @@ async def get_table_columns(
         import pymysql
         conn = pymysql.connect(
             host=ds.host, port=ds.port, user=ds.username,
-            password=password, database=ds.database_name or "",
+            password=password, database=database or ds.database_name or "",
             connect_timeout=10,
         )
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -376,7 +380,7 @@ async def get_table_columns(
         import psycopg2
         conn = psycopg2.connect(
             host=ds.host, port=ds.port, user=ds.username,
-            password=password, dbname=ds.database_name or "",
+            password=password, dbname=database or ds.database_name or "",
             connect_timeout=10,
         )
         cursor = conn.cursor()

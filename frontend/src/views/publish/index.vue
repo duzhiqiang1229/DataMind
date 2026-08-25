@@ -13,8 +13,6 @@
             @change="handleFilterChange"
           >
             <el-option label="数据模型" value="model" />
-            <el-option label="Spark任务" value="spark_task" />
-            <el-option label="DataX任务" value="datax_task" />
           </el-select>
           <el-button type="primary" @click="handleFilterChange">查询</el-button>
           <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
@@ -134,8 +132,6 @@
         <el-form-item label="发布类型" prop="publish_type">
           <el-select v-model="form.publish_type" style="width: 100%">
             <el-option label="数据模型" value="model" />
-            <el-option label="Spark任务" value="spark_task" />
-            <el-option label="DataX任务" value="datax_task" />
           </el-select>
         </el-form-item>
         <el-form-item label="目标环境">
@@ -302,8 +298,6 @@ async function handleExecute() {
 function typeLabel(type?: string) {
   const map: Record<string, string> = {
     model: "数据模型",
-    spark_task: "Spark任务",
-    datax_task: "DataX任务",
   };
   return map[type || ""] || type || "";
 }
@@ -311,8 +305,6 @@ function typeLabel(type?: string) {
 function typeTag(type?: string): TagType {
   const map: Record<string, TagType> = {
     model: "primary",
-    spark_task: "success",
-    datax_task: "warning",
   };
   return map[type || ""] || "info";
 }

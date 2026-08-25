@@ -43,83 +43,11 @@ export const datasourceApi = {
   query(id: string, sql: string, limit: number) {
     return request.post(`/datasources/${id}/query`, { sql, limit });
   },
-  getTables(id: string, schema?: string) {
-    return request.get(`/datasources/${id}/tables`, { params: { schema } });
+  getTables(id: string, schema?: string, database?: string) {
+    return request.get(`/datasources/${id}/tables`, { params: { schema, database } });
   },
-  getColumns(id: string, tableName: string, schema?: string) {
-    return request.get(`/datasources/${id}/tables/${tableName}/columns`, { params: { schema } });
-  },
-};
-
-// ============================================================
-// DataX Task API
-// ============================================================
-export const dataxApi = {
-  list(params: { page: number; page_size: number; status?: string }) {
-    return request.get("/datax-tasks", { params });
-  },
-  create(data: any) {
-    return request.post("/datax-tasks", data);
-  },
-  detail(id: string) {
-    return request.get(`/datax-tasks/${id}`);
-  },
-  update(id: string, data: any) {
-    return request.put(`/datax-tasks/${id}`, data);
-  },
-  delete(id: string) {
-    return request.delete(`/datax-tasks/${id}`);
-  },
-  trigger(id: string) {
-    return request.post(`/datax-tasks/${id}/trigger`, { run_immediately: true });
-  },
-  pause(id: string) {
-    return request.post(`/datax-tasks/${id}/pause`);
-  },
-  resume(id: string) {
-    return request.post(`/datax-tasks/${id}/resume`);
-  },
-  instances(id: string, params: { page: number; page_size: number }) {
-    return request.get(`/datax-tasks/${id}/instances`, { params });
-  },
-  instanceStatus(instanceId: string) {
-    return request.get(`/datax-tasks/instances/${instanceId}/status`);
-  },
-  instanceLog(instanceId: string) {
-    return request.get(`/datax-tasks/instances/${instanceId}/log`);
-  },
-};
-
-// ============================================================
-// Spark Task API
-// ============================================================
-export const sparkApi = {
-  list(params: { page: number; page_size: number; status?: string }) {
-    return request.get("/spark-tasks", { params });
-  },
-  create(data: any) {
-    return request.post("/spark-tasks", data);
-  },
-  detail(id: string) {
-    return request.get(`/spark-tasks/${id}`);
-  },
-  update(id: string, data: any) {
-    return request.put(`/spark-tasks/${id}`, data);
-  },
-  delete(id: string) {
-    return request.delete(`/spark-tasks/${id}`);
-  },
-  trigger(id: string) {
-    return request.post(`/spark-tasks/${id}/trigger`, { run_immediately: true });
-  },
-  instances(id: string, params: { page: number; page_size: number }) {
-    return request.get(`/spark-tasks/${id}/instances`, { params });
-  },
-  instanceStatus(instanceId: string) {
-    return request.get(`/spark-tasks/instances/${instanceId}/status`);
-  },
-  instanceLog(instanceId: string) {
-    return request.get(`/spark-tasks/instances/${instanceId}/log`);
+  getColumns(id: string, tableName: string, schema?: string, database?: string) {
+    return request.get(`/datasources/${id}/tables/${tableName}/columns`, { params: { schema, database } });
   },
 };
 
@@ -334,6 +262,51 @@ export const userApi = {
 };
 
 // ============================================================
+// MCP Management API
+// ============================================================
+export const mcpManagementApi = {
+  capabilities() {
+    return request.get("/mcp-management/capabilities");
+  },
+  clients() {
+    return request.get("/mcp-management/clients");
+  },
+  createClient(data: any) {
+    return request.post("/mcp-management/clients", data);
+  },
+  updateScopes(clientId: string, scopes: string[]) {
+    return request.put(`/mcp-management/clients/${clientId}/scopes`, { scopes });
+  },
+  tokens(clientId: string) {
+    return request.get(`/mcp-management/clients/${clientId}/tokens`);
+  },
+  issueToken(clientId: string, data: any) {
+    return request.post(`/mcp-management/clients/${clientId}/tokens`, data);
+  },
+  revokeToken(clientId: string, tokenId: string) {
+    return request.delete(`/mcp-management/clients/${clientId}/tokens/${tokenId}`);
+  },
+  toolCalls(limit = 100) {
+    return request.get("/mcp-management/tool-calls", { params: { limit } });
+  },
+  changeSets(status?: string) {
+    return request.get("/mcp-management/change-sets", { params: { status: status || undefined, limit: 500 } });
+  },
+  changeSetDetail(id: string) {
+    return request.get(`/mcp-management/change-sets/${id}`);
+  },
+  validateChangeSet(id: string) {
+    return request.post(`/mcp-management/change-sets/${id}/validate`);
+  },
+  commitChangeSet(id: string) {
+    return request.post(`/mcp-management/change-sets/${id}/commit`);
+  },
+  discardChangeSet(id: string) {
+    return request.post(`/mcp-management/change-sets/${id}/discard`);
+  },
+};
+
+// ============================================================
 // Dashboard API
 // ============================================================
 export const dashboardApi = {
@@ -342,9 +315,6 @@ export const dashboardApi = {
   },
   recentTasks(limit = 10) {
     return request.get("/dashboard/recent-tasks", { params: { limit } });
-  },
-  taskInstances(params: { page: number; page_size: number; task_type?: string; status?: string }) {
-    return request.get("/dashboard/task-instances", { params });
   },
   componentStatus() {
     return request.get("/dashboard/component-status");
@@ -409,10 +379,43 @@ export const cubeModelApi = {
 };
 
 // ============================================================
+// Self-hosted Data Assets API
+// ============================================================
+export const dataAssetApi = {
+  overview() {
+    return request.get("/assets/overview");
+  },
+  catalog(params: { page: number; page_size: number; keyword?: string; datasource_id?: string; status?: string; asset_type?: string }) {
+    return request.get("/assets/catalog", { params });
+  },
+  detail(id: string) {
+    return request.get(`/assets/catalog/${id}`);
+  },
+  sync(datasource_id?: string) {
+    return request.post("/assets/sync", { datasource_id: datasource_id || null });
+  },
+  lineage(keyword?: string) {
+    return request.get("/assets/lineage", { params: { keyword: keyword || undefined } });
+  },
+  qualityRules() {
+    return request.get("/assets/quality/rules");
+  },
+  createQualityRule(data: any) {
+    return request.post("/assets/quality/rules", data);
+  },
+  deleteQualityRule(id: string) {
+    return request.delete(`/assets/quality/rules/${id}`);
+  },
+  runQualityRule(id: string) {
+    return request.post(`/assets/quality/rules/${id}/run`);
+  },
+};
+
+// ============================================================
 // Metric Definition API
 // ============================================================
 export const metricDefinitionApi = {
-  list(params: { page: number; page_size: number; keyword?: string; category_id?: string }) {
+  list(params: { page: number; page_size: number; keyword?: string; category_id?: string; metric_type?: string }) {
     return request.get("/metric-definitions", { params });
   },
   create(data: any) {
@@ -423,42 +426,6 @@ export const metricDefinitionApi = {
   },
   delete(id: string) {
     return request.delete(`/metric-definitions/${id}`);
-  },
-};
-
-// ============================================================
-// OpenMetadata API
-// ============================================================
-export const openmetadataApi = {
-  databases(limit = 100) {
-    return request.get("/openmetadata/databases", { params: { limit } });
-  },
-  tables(database?: string, limit = 100) {
-    return request.get("/openmetadata/tables", { params: { database, limit } });
-  },
-  tableDetail(fqn: string) {
-    return request.get(`/openmetadata/tables/${fqn}`);
-  },
-  lineage(fqn: string, entity_type = "table") {
-    return request.get("/openmetadata/lineage", { params: { fqn, entity_type } });
-  },
-  search(q: string, limit = 20) {
-    return request.get("/openmetadata/search", { params: { q, limit } });
-  },
-  assets(params: { q?: string; entity_type?: string; page?: number; page_size?: number } = {}) {
-    return request.get("/openmetadata/assets", { params });
-  },
-  summary() {
-    return request.get("/openmetadata/summary");
-  },
-  governance(limit = 100) {
-    return request.get("/openmetadata/governance", { params: { limit } });
-  },
-  quality(table_fqn?: string, limit = 100) {
-    return request.get("/openmetadata/quality", { params: { table_fqn, limit } });
-  },
-  health() {
-    return request.get("/openmetadata/health");
   },
 };
 
@@ -483,6 +450,21 @@ export const dataServiceApi = {
   },
   execute(id: string, params: Record<string, any>) {
     return request.post(`/data-services/${id}/execute`, { params });
+  },
+  publish(id: string) {
+    return request.post(`/data-services/${id}/publish`);
+  },
+  offline(id: string) {
+    return request.post(`/data-services/${id}/offline`);
+  },
+  appKeys(id: string) {
+    return request.get(`/data-services/${id}/app-keys`);
+  },
+  createAppKey(id: string, data: { key_name: string; expires_at?: string }) {
+    return request.post(`/data-services/${id}/app-keys`, data);
+  },
+  revokeAppKey(id: string, keyId: string) {
+    return request.delete(`/data-services/${id}/app-keys/${keyId}`);
   },
 };
 
@@ -526,14 +508,11 @@ export const airflowApi = {
   retryDagRun(dagId: string, runId: string, taskId: string) {
     return request.post(`/airflow/${dagId}/runs/${runId}/retry`, { task_id: taskId });
   },
-  deployDags() {
-    return request.post("/airflow/deploy-dags");
-  },
-  createDag(data: any) {
-    return request.post("/airflow/create-dag", data);
-  },
   dagRuns(params: { page: number; page_size: number; dag_id?: string; status?: string }) {
     return request.get("/airflow/dag-runs", { params });
+  },
+  dagRunTasks(recordId: string) {
+    return request.get(`/airflow/dag-runs/${recordId}/tasks`);
   },
   syncRuns() {
     return request.post("/airflow/sync-runs");
@@ -543,27 +522,6 @@ export const airflowApi = {
 // ============================================================
 // DAG Workflow API (multi-task orchestration)
 // ============================================================
-export const dagWorkflowApi = {
-  list(params: { page: number; page_size: number }) {
-    return request.get("/dag-workflows", { params });
-  },
-  create(data: any) {
-    return request.post("/dag-workflows", data);
-  },
-  detail(id: string) {
-    return request.get(`/dag-workflows/${id}`);
-  },
-  update(id: string, data: any) {
-    return request.put(`/dag-workflows/${id}`, data);
-  },
-  delete(id: string) {
-    return request.delete(`/dag-workflows/${id}`);
-  },
-  deploy(id: string) {
-    return request.post(`/dag-workflows/${id}/deploy`);
-  },
-};
-
 // ============================================================
 // ETL Script API (multi-language script development)
 // ============================================================
@@ -585,9 +543,6 @@ export const etlScriptApi = {
   },
   execute(id: string, params: any) {
     return request.post(`/etl-scripts/${id}/execute`, params);
-  },
-  deploySchedule(id: string) {
-    return request.post(`/etl-scripts/${id}/deploy-schedule`);
   },
 };
 
@@ -634,6 +589,7 @@ export const tableOwnerApi = {
 // ============================================================
 export const dataServiceLogApi = {
   logs(apiId: string, params: { page: number; page_size: number }) { return request.get(`/data-services/${apiId}/logs`, { params }); },
+  allLogs(params: { page: number; page_size: number }) { return request.get("/data-services/call-logs", { params }); },
   callStats(days = 7) { return request.get("/data-services/call-stats", { params: { days } }); },
   permissions(apiId: string) { return request.get(`/data-services/${apiId}/permissions`); },
   assignPermission(apiId: string, data: any) { return request.post(`/data-services/${apiId}/permissions`, data); },

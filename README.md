@@ -1,195 +1,154 @@
 # DataMind 企业智能数据平台
 
-统一的企业数据管理、开发、治理和服务平台。通过连接六个已部署的开源组件（DataX、Spark、Airflow、Doris、Cube、OpenMetadata），提供数据源管理、数据同步、数据开发、数据仓库建模、数据查询和数据治理能力。
+DataMind 通过一套 Docker Compose 部署前端、后端、MCP、Airflow 3.3.1、PostgreSQL、Redis 与 Cube。当前正式发布基线为 `1.0.0`，版本号以根目录 `VERSION` 为准。
 
-## 技术栈
+## 部署要求
 
-**后端**: FastAPI 0.115 + SQLAlchemy 2.0 (async) + PostgreSQL 16 + Redis 7.2 + Alembic
-**前端**: Vue 3.5 + TypeScript + Vite 6 + Element Plus + Pinia + ECharts
-**调度**: Airflow (REST API) + DataX (同步) + Spark (计算)
-**存储**: Doris (OLAP) + Cube (语义层) + OpenMetadata (元数据)
+- Docker Engine 24+ 或 Docker Desktop
+- Docker Compose v2
+- 最低 8 核 CPU、16 GB 内存；建议 24–32 GB 内存
+- 至少 100 GB 可用磁盘
 
-## 目录结构
+## 目录说明
 
-```
+```text
 DataMind/
-├── backend/                # FastAPI 后端
-│   ├── app/
-│   │   ├── main.py         # 应用入口
-│   │   ├── core/           # 配置、数据库、Redis、安全、依赖注入
-│   │   ├── api/v1/         # 10 个 API 路由模块
-│   │   ├── services/       # 11 个业务逻辑服务
-│   │   ├── integrations/   # 7 个组件适配器
-│   │   ├── models/         # 9 个 ORM 模型文件 (21 张表)
-│   │   ├── schemas/        # Pydantic 请求/响应模型
-│   │   ├── utils/          # APScheduler 定时轮询
-│   │   └── seed_data.py    # 幂等种子数据 (admin 用户/角色/权限/菜单)
-│   ├── alembic/            # 数据库迁移
-│   ├── tests/              # pytest 测试 (38 单元 + 11 集成)
-│   ├── requirements.txt
-│   ├── requirements-dev.txt
-│   ├── alembic.ini
-│   ├── pytest.ini
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   └── .env.example
-├── frontend/               # Vue 3 前端
-│   └── src/
-│       ├── views/          # 6 个页面 (login/dashboard/datasource/datax/query/system)
-│       ├── api/            # Axios 封装 + API 模块
-│       ├── stores/         # Pinia 状态管理
-│       ├── router/         # Vue Router (含鉴权守卫)
-│       └── layouts/        # 主布局
-├── airflow-dags/           # Airflow DAG 模板 (DataX + Spark)
-├── database/               # SQL 脚本
-│   ├── 001_init_schema.sql       # PostgreSQL DDL
-│   └── 002_doris_warehouse_init.sql  # Doris 数仓初始化 (ODS/DWD/DWS/ADS)
-├── docs/                   # 14 篇设计文档
-└── TECH_DESIGN.md          # 技术设计文档
+├── backend/                 FastAPI 后端、迁移和运维脚本
+├── frontend/                Vue 前端及 Nginx 配置
+├── cube/                    Cube 配置与语义模型
+├── airflow/                 Airflow 镜像、DAG、日志、插件和初始化脚本
+├── postgres/init/           PostgreSQL 首次启动数据库初始化
+├── scripts/                 发布、备份、配置校验和验收脚本
+├── docker-compose.prod.yml  统一部署入口
+├── VERSION                  正式发布版本号
+├── RELEASE.md               发布范围、验收与回滚说明
+└── README.md                部署说明
 ```
 
-## 快速开始
+`backups/` 属于本机数据或恢复资料，不应复制到公开代码仓库。
 
-### 方式一: Docker Compose (推荐)
+## 首次部署
 
-```bash
-# 1. 在项目根目录准备生产配置
-cp backend/.env.example backend/.env
-cp openmetadata/.env.example openmetadata/.env
-# 必须设置随机 JWT_SECRET_KEY、有效 Fernet ENCRYPTION_KEY、
-# 强 DB_PASSWORD/REDIS_PASSWORD，以及至少 24 位的随机 EXECUTOR_TOKEN。
-# 同时替换 openmetadata/.env 中的数据库密码、管理员密码和两个 Fernet Key；
-# 两个 Fernet Key 在产生加密数据后必须保持稳定。
-# 首次部署还应设置：
-# BOOTSTRAP_ADMIN=true
-# INITIAL_ADMIN_PASSWORD=<至少 12 位的强密码>
+1. 准备唯一的环境配置文件：
 
-# 2. 构建并启动。后端入口会自动执行 Alembic 迁移；
-# BOOTSTRAP_ADMIN=true 时会幂等初始化管理员、角色、权限和菜单。
-docker compose -f docker-compose.prod.yml up -d --build
-
-# 3. 检查服务
-docker compose -f docker-compose.prod.yml ps
-# 前端: http://localhost/
-# 健康检查: http://localhost:8000/health
-
-# 4. OpenMetadata 已包含在主 Compose 中，无需启动第二个项目。
-# 首次启动会额外下载较大的 OpenMetadata 官方镜像。
-# OpenMetadata: http://localhost:8585
-# 启动后在「系统管理 → 组件配置」中保存 Bot JWT Token。
+```powershell
+Copy-Item .env.example .env
 ```
 
-OpenMetadata 与 DataMind 共用同一个 PostgreSQL 实例，但分别使用 `openmetadata_db`、
-`airflow_db` 和 `datamind` 三个独立数据库；首次启动会自动创建前两个数据库及专用账号。
-Elasticsearch 继续提供资产搜索、筛选和聚合。
-当前单机配置用于试运行；生产环境应参照官方容量要求拆分部署、轮换管理员和 JWT 密钥，
-并为 DataMind 配置最小权限 Bot。
-
-### 方式二: 本地开发
-
-#### 前置条件
-
-- Python 3.12+
-- Node.js 18+
-- PostgreSQL 16 (本地或 Docker)
-- Redis 7 (本地或 Docker)
-
-#### 后端
+Linux：
 
 ```bash
-cd backend
-
-# 1. 创建虚拟环境
-python -m venv .venv
-source .venv/bin/activate        # Linux/macOS
-# .venv\Scripts\activate         # Windows
-
-# 2. 安装依赖
-pip install -r requirements-dev.txt
-
-# 3. 配置环境变量
 cp .env.example .env
-# 编辑 .env, 填入你的 PostgreSQL/Redis 连接信息
-
-# 4. 数据库迁移
-alembic upgrade head
-
-# 5. 初始化种子数据
-python -m app.seed_data
-
-# 6. 启动开发服务器
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-#### 前端
+2. 只编辑根目录 `.env`，替换全部 `change-me`：
+
+- DataMind/Airflow 管理员、数据库、Redis、JWT、Fernet 和 Executor 密钥
+- Cube 使用的 Doris 地址、账号和密码
+
+Cube 和后端直接共用一个 `CUBE_API_SECRET`，不需要重复填写。Fernet Key 产生加密数据后必须保持稳定。
+
+填写后先检查配置：
+
+```powershell
+.\scripts\validate-env.ps1
+```
+
+Linux：
 
 ```bash
-cd frontend
-
-# 1. 安装依赖
-npm install
-
-# 2. 启动开发服务器
-npm run dev
-# 访问 http://localhost:5173
-
-# 3. 生产构建
-npm run build
+sh scripts/validate-env.sh
 ```
 
-## 数据库迁移 (Alembic)
+3. 首次部署或版本升级统一执行发布脚本。脚本会校验配置；如果已有数据库，会先自动备份，然后拉取锁定镜像、构建版本镜像、启动服务并完成验收：
+
+```powershell
+.\scripts\release.ps1
+```
+
+Linux：
 
 ```bash
-cd backend
-
-# 生成新迁移 (修改模型后)
-alembic revision --autogenerate -m "描述变更内容"
-
-# 应用迁移到数据库
-alembic upgrade head
-
-# 回滚一个版本
-alembic downgrade -1
-
-# 查看迁移历史
-alembic history
-
-# 查看当前版本
-alembic current
+sh scripts/release.sh
 ```
 
-## 测试
+需要分步排查时可手动执行：
+
+```powershell
+docker compose -f docker-compose.prod.yml config --quiet
+docker compose -f docker-compose.prod.yml pull postgres redis cubestore cube
+docker compose -f docker-compose.prod.yml build airflow-init backend frontend
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml ps
+```
+
+后端启动时自动执行 Alembic 数据库迁移。Airflow 初始化容器会先迁移 Airflow 数据库，成功后再启动 API Server、Scheduler、DAG Processor 和 Triggerer。
+
+当前开发部署使用一个 PostgreSQL 容器、两个相互独立的数据库：
+
+- `datamind`：DataMind 平台数据
+- `airflow`：Airflow 元数据
+
+Airflow 使用 `LocalExecutor`；任务进程由 Scheduler 在本机容器内启动。DataMind 与 Airflow 通过 `airflow/dags/` 共享 DAG 文件，不需要 SSH/SFTP。
+
+## 访问地址
+
+- DataMind：`http://服务器地址/`
+- 后端健康检查：`http://服务器地址:8000/health`
+- DataMind MCP：`http://服务器地址:8001/mcp`
+- MCP健康检查：`http://服务器地址:8001/health`
+- MCP能力：数据源/表/字段读取、数据域/业务过程/模型设计、SQL预览、Airflow调度、物理表目录与运行血缘、质量规则与检测、Cube建模、指标建设、数据API草稿/预览/发布、AppKey与调用监控
+- Airflow：`http://服务器地址:8082`
+- Airflow 健康检查：`http://服务器地址:8082/api/v2/monitor/health`
+- Cube：`http://服务器地址:4000`
+
+默认只有 PostgreSQL 固定绑定 `127.0.0.1:5432`；其他端口的监听地址和端口号可通过 `.env` 中的 `*_BIND_ADDRESS` 与 `*_PORT` 调整。正式网络应通过防火墙、VPN或反向代理限制 `8000`、`8001`、`4000` 和 `8082` 管理端口。
+
+## 初始化管理员
+
+首次启动前在根目录 `.env` 设置：
+
+```dotenv
+BOOTSTRAP_ADMIN=true
+INITIAL_ADMIN_USERNAME=admin
+INITIAL_ADMIN_PASSWORD=至少12位的强密码
+```
+
+确认登录成功后将 `BOOTSTRAP_ADMIN=false`，再执行：
+
+```powershell
+docker compose -f docker-compose.prod.yml up -d backend
+```
+
+## 更新部署
+
+推荐直接执行发布脚本，它会先备份再更新。也可以单独备份和验收：
+
+```powershell
+.\scripts\backup.ps1
+.\scripts\verify-release.ps1
+```
+
+Linux：
 
 ```bash
-cd backend
-
-# 运行单元测试 (无需 PostgreSQL/Redis)
-pytest
-
-# 运行集成测试 (需要 PostgreSQL + Redis 运行中)
-pytest -m integration
-
-# 运行所有测试
-pytest -m ""
-
-# 查看测试覆盖率
-pytest --cov=app --cov-report=term-missing
+sh scripts/backup.sh
+sh scripts/verify-release.sh
 ```
 
-## 初始管理员
+## 日常运维
 
-生产环境不再提供默认密码。首次启动前，在 `backend/.env` 中设置
-`BOOTSTRAP_ADMIN=true`、`INITIAL_ADMIN_USERNAME` 和至少 12 位的
-`INITIAL_ADMIN_PASSWORD`。初始化成功后可将 `BOOTSTRAP_ADMIN` 改回 `false`。
+```powershell
+# 查看日志
+docker compose -f docker-compose.prod.yml logs -f
 
-## 开发计划
+# 停止服务但保留数据卷
+docker compose -f docker-compose.prod.yml down
 
-项目按 7 个 Sprint 推进, 详见 `docs/DataMind开发实施计划与项目里程碑.md`:
+# 重新启动
+docker compose -f docker-compose.prod.yml up -d
+```
 
-1. Sprint 1: 基础门户 + RBAC + 集成层 (进行中)
-2. Sprint 2: DataX → Doris 数据同步
-3. Sprint 3: Spark + Airflow 数据开发
-4. Sprint 4: Doris 建模 + SQL 工作台
-5. Sprint 5: Cube 指标层
-6. Sprint 6: OpenMetadata 数据治理
-7. Sprint 7: 生产发布
+不要执行 `docker compose down -v`，它会删除 Compose 管理的数据卷。
+
+完整的发布清单、镜像锁定策略、备份恢复和回滚步骤见 [RELEASE.md](RELEASE.md)。

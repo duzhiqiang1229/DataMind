@@ -1,6 +1,8 @@
 """DataMind Backend - Application Entry Point"""
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -9,8 +11,19 @@ from app.core.config import settings, validate_production_settings
 from app.core.database import engine, Base
 from app.core.redis import redis_client
 from app.api.router import api_router
-from app.utils.task_scheduler import init_scheduler, shutdown_scheduler
 from app.utils.operation_log_middleware import OperationLogMiddleware
+
+
+async def _sync_airflow_runtime_lineage() -> None:
+    """Periodically pull completed Airflow tasks and their runtime lineage."""
+    from app.core.database import async_session
+    from app.services.airflow_service import sync_dag_runs
+
+    async with async_session() as db:
+        try:
+            await sync_dag_runs(db)
+        except Exception as exc:
+            logger.warning(f"Periodic Airflow runtime lineage sync failed: {exc}")
 
 
 @asynccontextmanager
@@ -30,14 +43,20 @@ async def lifespan(app: FastAPI):
     await redis_client.ping()
     logger.info("Redis connected")
 
-    # Start Airflow status polling scheduler
-    init_scheduler()
-    logger.info("Task status polling scheduler started")
+    scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
+    scheduler.add_job(
+        _sync_airflow_runtime_lineage, "interval", minutes=5,
+        id="airflow_runtime_lineage_sync", replace_existing=True,
+        coalesce=True, max_instances=1,
+        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    scheduler.start()
+    logger.info("Airflow runtime lineage sync scheduled every 5 minutes")
 
     yield
 
     # --- Shutdown ---
-    shutdown_scheduler()
+    scheduler.shutdown(wait=False)
     await redis_client.close()
     await engine.dispose()
     logger.info(f"{settings.APP_NAME} stopped")
@@ -46,7 +65,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     description="DataMind Enterprise Data Platform API",
-    version="1.0.0",
+    version=settings.APP_VERSION,
     lifespan=lifespan,
     docs_url="/docs" if settings.APP_DEBUG else None,
     redoc_url="/redoc" if settings.APP_DEBUG else None,
@@ -70,4 +89,4 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "service": settings.APP_NAME}
+    return {"status": "ok", "service": settings.APP_NAME, "version": settings.APP_VERSION}

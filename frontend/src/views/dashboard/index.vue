@@ -63,7 +63,7 @@
 <script setup lang="ts">
 import { ref, onMounted, shallowRef } from "vue";
 import * as echarts from "@/utils/echarts";
-import { dashboardApi, openmetadataApi } from "@/api";
+import { dashboardApi } from "@/api";
 import { formatRunId } from "@/utils/format";
 
 type TagType = "primary" | "success" | "warning" | "info" | "danger";
@@ -88,16 +88,13 @@ const trendChartRef = ref<HTMLElement>();
 const chartInstance = shallowRef<echarts.ECharts>();
 
 onMounted(async () => {
-  openmetadataApi.summary()
-    .then((summary: any) => { statCards.value[0].value = summary?.totalAssets || 0; })
-    .catch(() => { statCards.value[0].value = 0; });
-
   try {
     const [stats, tasks] = await Promise.all([
       dashboardApi.stats(),
       dashboardApi.recentTasks(10),
     ]);
 
+    statCards.value[0].value = stats.total_assets || 0;
     statCards.value[1].value = stats.total_datasources || 0;
     statCards.value[2].value = `${stats.schedule_task_count || 0} / ${stats.today_executions || 0}`;
     statCards.value[3].value = stats.published_metrics_count || 0;

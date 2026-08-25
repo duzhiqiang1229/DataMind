@@ -1,5 +1,6 @@
 """Airflow DAG management API: list, trigger, pause/resume, runs, logs, retry."""
 from typing import Optional
+import uuid
 
 from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
@@ -27,15 +28,6 @@ class RetryDagRunBody(BaseModel):
     task_id: str
 
 
-class CreateDagBody(BaseModel):
-    """Request body for creating a scheduled DAG task."""
-    dag_name: str
-    task_type: str  # datax / spark
-    task_id: str
-    schedule: str
-    description: Optional[str] = None
-
-
 class CreateDagFileBody(BaseModel):
     """Request body for creating a scheduling script (.py DAG file)."""
     script_name: str
@@ -45,34 +37,6 @@ class CreateDagFileBody(BaseModel):
 class UpdateDagFileBody(BaseModel):
     """Request body for saving a DAG file's content."""
     content: str
-
-
-@router.post("/deploy-dags", response_model=ResponseOK[dict], summary="部署 DAG 模板", dependencies=engineer_only)
-async def deploy_dags(
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
-):
-    try:
-        result = await airflow_service.deploy_dags(db)
-    except ValueError as e:
-        return ResponseOK(code=400, message=str(e))
-    return ResponseOK(data=result)
-
-
-@router.post("/create-dag", response_model=ResponseOK[dict], summary="创建 DAG 任务", dependencies=engineer_only)
-async def create_dag(
-    body: CreateDagBody,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
-):
-    try:
-        result = await airflow_service.create_dag_task(
-            db, body.dag_name, body.task_type, body.task_id,
-            body.schedule, body.description,
-        )
-    except ValueError as e:
-        return ResponseOK(code=400, message=str(e))
-    return ResponseOK(data=result)
 
 
 @router.get("/dag-runs", response_model=PageResponse[dict], summary="DAG 运行记录(同步)")
@@ -96,6 +60,15 @@ async def sync_runs(
 ):
     result = await airflow_service.sync_dag_runs(db)
     return ResponseOK(data=result)
+
+
+@router.get("/dag-runs/{record_id}/tasks", response_model=ResponseOK[list], summary="运行记录任务明细")
+async def dag_run_tasks(
+    record_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    return ResponseOK(data=await airflow_service.list_recorded_task_runs(db, record_id))
 
 
 # --- Endpoints ---

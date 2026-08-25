@@ -32,5 +32,5 @@ class CurrentUserResponse(BaseModel):
     avatar: Optional[str] = None
     department: Optional[str] = None
     roles: list[str] = []           # ["admin", "data_engineer"]
-    permissions: list[str] = []    # ["datax:task:create", "doris:query:execute"]
+    permissions: list[str] = []    # ["datasource:view", "doris:query:execute"]
     menus: list[dict] = []          # 菜单树

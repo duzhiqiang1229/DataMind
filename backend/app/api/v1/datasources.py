@@ -117,10 +117,11 @@ async def query_datasource(
 async def list_tables(
     datasource_id: str,
     schema: str | None = None,
+    database: str | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    result = await datasource_service.list_tables(db, __import__("uuid").UUID(datasource_id), schema)
+    result = await datasource_service.list_tables(db, __import__("uuid").UUID(datasource_id), schema, database)
     return ResponseOK(data=result)
 
 
@@ -139,10 +140,11 @@ async def get_table_columns(
     datasource_id: str,
     table_name: str,
     schema: str | None = None,
+    database: str | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
     result = await datasource_service.get_table_columns(
-        db, __import__("uuid").UUID(datasource_id), table_name, schema
+        db, __import__("uuid").UUID(datasource_id), table_name, schema, database
     )
     return ResponseOK(data=result)

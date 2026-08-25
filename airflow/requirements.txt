@@ -1,0 +1,7 @@
+apache-airflow-providers-standard==1.17.0
+apache-airflow-providers-http==6.0.5
+apache-airflow-providers-mysql==6.6.1
+apache-airflow-providers-postgres==7.0.1
+pymysql==1.1.1
+sqlparse==0.5.3
+sqlglot==27.12.0

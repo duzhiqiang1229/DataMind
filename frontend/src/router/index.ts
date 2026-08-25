@@ -27,16 +27,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "数据源管理", icon: "Coin" },
       },
       {
-        path: "datax",
-        name: "DataXTasks",
-        component: () => import("@/views/datax/index.vue"),
-        meta: { title: "数据集成", icon: "Sort" },
-      },
-      {
         path: "query",
         name: "QueryWorkbench",
         component: () => import("@/views/query/index.vue"),
-        meta: { title: "ETL 开发", icon: "Monitor" },
+        meta: { title: "数据开发", icon: "Monitor" },
       },
       {
         path: "data-modeling/domain",
@@ -78,7 +72,7 @@ const routes: RouteRecordRaw[] = [
         path: "metrics/modeling",
         name: "MetricsModeling",
         component: () => import("@/views/metrics/modeling/index.vue"),
-        meta: { title: "Cube 建模", icon: "SetUp" },
+        meta: { title: "Cube建模", icon: "SetUp" },
       },
       {
         path: "assets/catalog",
@@ -93,16 +87,20 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "血缘关系", icon: "Share" },
       },
       {
-        path: "assets/steward",
-        name: "DataSteward",
-        component: () => import("@/views/assets/steward/index.vue"),
-        meta: { title: "数据责任人", icon: "Avatar" },
+        path: "assets/quality",
+        name: "DataQuality",
+        component: () => import("@/views/assets/quality/index.vue"),
+        meta: { title: "数据质量", icon: "CircleCheck" },
       },
       {
         path: "data-service",
-        name: "DataService",
+        redirect: "/data-service/catalog",
+      },
+      {
+        path: "data-service/catalog",
+        name: "DataServiceCatalog",
         component: () => import("@/views/data-service/index.vue"),
-        meta: { title: "数据服务", icon: "Share" },
+        meta: { title: "服务目录", icon: "Share" },
       },
       {
         path: "system/user",
@@ -129,6 +127,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "组件详情", hidden: true },
       },
       {
+        path: "system/mcp",
+        name: "McpManagement",
+        component: () => import("@/views/system/mcp/index.vue"),
+        meta: { title: "MCP管理", icon: "Cpu" },
+      },
+      {
         path: "schedule/monitor",
         name: "TaskMonitor",
         component: () => import("@/views/schedule/monitor/index.vue"),
@@ -144,7 +148,7 @@ const routes: RouteRecordRaw[] = [
         path: "data-service/stats",
         name: "DataServiceStats",
         component: () => import("@/views/data-service/stats/index.vue"),
-        meta: { title: "调用统计", icon: "TrendCharts" },
+        meta: { title: "调用监控", icon: "TrendCharts" },
       },
     ],
   },

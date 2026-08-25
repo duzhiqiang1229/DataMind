@@ -223,7 +223,7 @@ async def publish_model(db: AsyncSession, model_id: uuid.UUID) -> dict | None:
     if not model:
         return None
     if model.is_external:
-        raise ValueError("OpenMetadata 同步模型对应现有物理表，不能在此重复发布建表")
+        raise ValueError("外部同步模型对应现有物理表，不能在此重复发布建表")
     if not model.fields:
         raise ValueError("模型没有字段，无法生成建表语句")
 

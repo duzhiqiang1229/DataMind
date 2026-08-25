@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class ComponentConfigBase(BaseModel):
     """组件配置基础字段。"""
-    component_code: str = Field(..., description="组件标识: airflow/doris/cube/openmetadata")
+    component_code: str = Field(..., description="组件标识: airflow/doris/cube")
     component_name: str = Field(..., description="组件名称")
     component_type: str = Field(..., description="组件类型: scheduler/olap/semantic/governance")
     base_url: str = Field(..., description="API基础地址")

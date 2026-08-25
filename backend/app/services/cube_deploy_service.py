@@ -13,7 +13,7 @@ from app.models import DataSource
 
 CUBE_COMPOSE_DIR = os.environ.get("CUBE_COMPOSE_DIR", r"D:\DataMind")
 CUBE_COMPOSE_FILE = os.path.join(CUBE_COMPOSE_DIR, "docker-compose.prod.yml")
-CUBE_ENV_FILE = os.path.join(CUBE_COMPOSE_DIR, "cube", ".env")
+CUBE_ENV_FILE = os.environ.get("DATAMIND_ENV_FILE", os.path.join(CUBE_COMPOSE_DIR, ".env"))
 CUBE_CONTAINER = os.environ.get("CUBE_CONTAINER_NAME", "cube")
 DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
 EXECUTOR_URL = settings.EXECUTOR_URL.rstrip("/")
@@ -81,7 +81,11 @@ async def _restart_cube_container(timeout: int = 180) -> tuple[int, str, str]:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 k, v = line.split("=", 1)
-                env_updates[k.strip()] = v.strip()
+                key = k.strip()
+                if key.startswith("CUBEJS_"):
+                    env_updates[key] = v.strip()
+                elif key == "CUBE_API_SECRET":
+                    env_updates["CUBEJS_API_SECRET"] = v.strip()
         except FileNotFoundError:
             return 1, "", f"env file not found: {CUBE_ENV_FILE}"
 
@@ -239,24 +243,38 @@ async def sync_cube_datasource(
     except FileNotFoundError:
         pass
     api_secret = (
-        os.environ.get("CUBEJS_API_SECRET")
-        or existing_env.get("CUBEJS_API_SECRET")
+        os.environ.get("CUBE_API_SECRET")
+        or existing_env.get("CUBE_API_SECRET")
         or secrets.token_urlsafe(32)
     )
 
-    # write cube/.env consumed by docker compose (env_file)
-    env_content = (
-        f"CUBEJS_DEV_MODE={str(settings.APP_ENV.lower() != 'production').lower()}\n"
-        f"CUBEJS_DB_TYPE={cube_db_type}\n"
-        f"CUBEJS_DB_HOST={ds.host}\n"
-        f"CUBEJS_DB_PORT={ds.port}\n"
-        f"CUBEJS_DB_NAME={ds.database_name or ''}\n"
-        f"CUBEJS_DB_USER={ds.username}\n"
-        f"CUBEJS_DB_PASS={password}\n"
-        f"CUBEJS_API_SECRET={api_secret}\n"
-    )
-    with open(CUBE_ENV_FILE, "w", encoding="utf-8") as f:
-        f.write(env_content)
+    # Update only Cube keys in the unified root .env and preserve all other secrets.
+    cube_updates = {
+        "CUBEJS_DEV_MODE": str(settings.APP_ENV.lower() != "production").lower(),
+        "CUBEJS_DB_TYPE": cube_db_type,
+        "CUBEJS_DB_HOST": ds.host,
+        "CUBEJS_DB_PORT": str(ds.port),
+        "CUBEJS_DB_NAME": ds.database_name or "",
+        "CUBEJS_DB_USER": ds.username,
+        "CUBEJS_DB_PASS": password,
+        "CUBE_API_SECRET": api_secret,
+    }
+    env_path = Path(CUBE_ENV_FILE)
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+    written: set[str] = set()
+    updated_lines: list[str] = []
+    for line in lines:
+        if "=" in line and not line.lstrip().startswith("#"):
+            key = line.split("=", 1)[0].strip()
+            if key in cube_updates:
+                updated_lines.append(f"{key}={cube_updates[key]}")
+                written.add(key)
+                continue
+        updated_lines.append(line)
+    for key, value in cube_updates.items():
+        if key not in written:
+            updated_lines.append(f"{key}={value}")
+    env_path.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
 
     # recreate the cube container so the new env takes effect
     code, out, err = await _restart_cube_container()

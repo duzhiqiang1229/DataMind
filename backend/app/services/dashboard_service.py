@@ -6,11 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from app.models import (
-    DataSource, DataXTask, SparkTask, TaskInstance, QueryHistory,
+    DataSource, QueryHistory, DataModel,
     ComponentConfig, AirflowDagRun, MetricDefinition, DataServiceApi,
 )
 from app.services.airflow_service import list_dags as list_airflow_dags
-from app.services.component_service import get_airflow_client, get_doris_client, get_cube_client, get_openmetadata_client
 
 
 async def get_stats(db: AsyncSession) -> dict:
@@ -20,9 +19,8 @@ async def get_stats(db: AsyncSession) -> dict:
     # data sources
     ds_total = (await db.execute(select(func.count(DataSource.id)))).scalar_one()
 
-    # datax + spark tasks (platform tasks)
-    datax_total = (await db.execute(select(func.count(DataXTask.id)))).scalar_one()
-    spark_total = (await db.execute(select(func.count(SparkTask.id)))).scalar_one()
+    # 自建资产目录当前以已登记的数据模型作为资产基数，后续由资产采集表替代。
+    asset_total = (await db.execute(select(func.count(DataModel.id)))).scalar_one()
 
     # 数据任务：调度任务中运行中的任务数 = Airflow 中未暂停的 DAG 数
     airflow_dags = await list_airflow_dags(db, limit=100, offset=0)
@@ -35,10 +33,10 @@ async def get_stats(db: AsyncSession) -> dict:
         .where(MetricDefinition.status.in_(["published", "active"]))
     )).scalar_one()
 
-    # 数据接口：启用的数据服务 API 数
+    # 数据接口：数据服务中已发布的 API 数
     api_service_count = (await db.execute(
         select(func.count(DataServiceApi.id))
-        .where(DataServiceApi.status == "active")
+        .where(DataServiceApi.status == "published")
     )).scalar_one()
 
     # 今日执行：任务监控中今日（北京时间）运行的任务数
@@ -78,7 +76,7 @@ async def get_stats(db: AsyncSession) -> dict:
 
     return {
         "total_datasources": ds_total,
-        "total_datax_tasks": datax_total + spark_total,
+        "total_assets": asset_total,
         "running_tasks": running_tasks,
         "schedule_task_count": schedule_task_count,
         "published_metrics_count": published_metrics_count,
@@ -109,46 +107,6 @@ async def get_recent_tasks(db: AsyncSession, limit: int = 10) -> list[dict]:
         }
         for r in runs
     ]
-
-
-async def list_task_instances(
-    db: AsyncSession, page: int, page_size: int,
-    task_type: str | None = None, status: str | None = None,
-) -> tuple[list[dict], int]:
-    """Paginated task instances for task monitor page."""
-    query = select(TaskInstance)
-    count_q = select(func.count(TaskInstance.id))
-    if task_type:
-        query = query.where(TaskInstance.task_type == task_type)
-        count_q = count_q.where(TaskInstance.task_type == task_type)
-    if status:
-        query = query.where(TaskInstance.status == status)
-        count_q = count_q.where(TaskInstance.status == status)
-
-    total = (await db.execute(count_q)).scalar_one()
-    result = await db.execute(
-        query.order_by(TaskInstance.created_at.desc())
-        .offset((page - 1) * page_size).limit(page_size)
-    )
-    instances = result.scalars().all()
-    items = [
-        {
-            "id": str(t.id),
-            "task_type": t.task_type,
-            "task_id": str(t.task_id),
-            "dag_id": t.dag_id,
-            "dag_run_id": t.dag_run_id,
-            "status": t.status,
-            "started_at": t.started_at.isoformat() if t.started_at else None,
-            "ended_at": t.ended_at.isoformat() if t.ended_at else None,
-            "duration_seconds": t.duration_seconds,
-            "rows_read": t.rows_read,
-            "rows_written": t.rows_written,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
-        }
-        for t in instances
-    ]
-    return items, total
 
 
 async def get_component_status(db: AsyncSession) -> list[dict]:

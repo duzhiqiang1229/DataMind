@@ -37,7 +37,6 @@ async def create_script(
     result = await etl_script_service.create_script(db, req, user.id)
     return ResponseOK(data=result)
 
-
 @router.get("/{script_id}", response_model=ResponseOK[dict], summary="ETL 脚本详情")
 async def get_script(
     script_id: str,
@@ -86,19 +85,6 @@ async def execute_script(
         result = await etl_script_service.execute_script(
             db, uuid.UUID(script_id), req.datasource_id, req.database, req.limit
         )
-    except ValueError as e:
-        return ResponseOK(code=400, message=str(e))
-    return ResponseOK(data=result)
-
-
-@router.post("/{script_id}/deploy-schedule", response_model=ResponseOK[dict], summary="部署调度脚本到 Airflow", dependencies=engineer_only)
-async def deploy_schedule(
-    script_id: str,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
-):
-    try:
-        result = await etl_script_service.deploy_schedule(db, uuid.UUID(script_id))
     except ValueError as e:
         return ResponseOK(code=400, message=str(e))
     return ResponseOK(data=result)

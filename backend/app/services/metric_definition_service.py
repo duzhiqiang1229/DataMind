@@ -12,6 +12,7 @@ from app.schemas.metric_definition import MetricDefinitionCreate, MetricDefiniti
 async def list_definitions(
     db: AsyncSession, page: int, page_size: int,
     keyword: Optional[str] = None, category_id: Optional[str] = None,
+    metric_type: Optional[str] = None,
 ) -> tuple[list[dict], int]:
     query = select(MetricDefinition)
     count_q = select(func.count(MetricDefinition.id))
@@ -28,6 +29,9 @@ async def list_definitions(
     if category_id:
         query = query.where(MetricDefinition.category_id == uuid.UUID(category_id))
         count_q = count_q.where(MetricDefinition.category_id == uuid.UUID(category_id))
+    if metric_type:
+        query = query.where(MetricDefinition.metric_type == metric_type)
+        count_q = count_q.where(MetricDefinition.metric_type == metric_type)
 
     total = (await db.execute(count_q)).scalar_one()
     result = await db.execute(
@@ -46,6 +50,7 @@ async def create_definition(
     d = MetricDefinition(
         metric_code=metric_code,
         metric_name=req.metric_name,
+        metric_type=req.metric_type,
         cube_name=req.cube_name,
         cube_measure=req.cube_measure,
         category_id=uuid.UUID(req.category_id) if req.category_id else None,
@@ -74,6 +79,8 @@ async def update_definition(
         return None
     if req.metric_name is not None:
         d.metric_name = req.metric_name
+    if req.metric_type is not None:
+        d.metric_type = req.metric_type
     if req.cube_name is not None:
         d.cube_name = req.cube_name
     if req.cube_measure is not None:
@@ -116,6 +123,7 @@ def _to_dict(d: MetricDefinition) -> dict:
         "id": str(d.id),
         "metric_code": d.metric_code,
         "metric_name": d.metric_name,
+        "metric_type": d.metric_type,
         "cube_name": d.cube_name,
         "cube_measure": d.cube_measure,
         "category_id": str(d.category_id) if d.category_id else None,

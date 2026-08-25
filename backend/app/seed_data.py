@@ -4,14 +4,15 @@ Fully idempotent — safe to run multiple times.
 Run: python -m app.seed_data
 """
 import asyncio
+import json
 
 from sqlalchemy import select
 from app.core.database import async_session, engine, Base
-from app.core.security import hash_password
+from app.core.security import encrypt_value, hash_password
 from app.core.config import settings
 from app.models import (
     User, Role, Permission, UserRole, Menu, RoleMenu,
-    SystemConfig, RolePermission,
+    ComponentConfig, SystemConfig, RolePermission,
 )
 
 
@@ -44,6 +45,50 @@ async def seed():
             db.add(admin)
             await db.flush()
             print(f"Admin user created (id={admin.id})")
+
+        # --- Built-in Compose components ---
+        built_in_components = [
+            {
+                "component_code": "airflow",
+                "component_name": "Airflow 调度服务",
+                "component_type": "scheduler",
+                "base_url": "http://airflow-api-server:8080",
+                "config_json": {"api_version": "3"},
+                "auth_type": "airflow_jwt",
+                "credentials": {
+                    "username": admin_username,
+                    "password": admin_password,
+                },
+            },
+            {
+                "component_code": "cube",
+                "component_name": "Cube 语义指标引擎",
+                "component_type": "semantic",
+                "base_url": "http://cube:4000",
+                "config_json": {"dev_mode": "false"},
+                "auth_type": "none",
+                "credentials": None,
+            },
+        ]
+        for component_data in built_in_components:
+            result = await db.execute(
+                select(ComponentConfig).where(
+                    ComponentConfig.component_code == component_data["component_code"]
+                )
+            )
+            if result.scalar_one_or_none():
+                continue
+            credentials = component_data.pop("credentials")
+            db.add(ComponentConfig(
+                **component_data,
+                credentials_encrypted=(
+                    encrypt_value(json.dumps(credentials, ensure_ascii=False))
+                    if credentials else None
+                ),
+                status="active",
+            ))
+        await db.flush()
+        print("Built-in Airflow and Cube component configs verified")
 
         # --- Roles (idempotent: fetch or create) ---
         role_map = {}
@@ -90,11 +135,6 @@ async def seed():
             ("datasource:create", "创建数据源", "datasource", "create"),
             ("datasource:update", "更新数据源", "datasource", "update"),
             ("datasource:delete", "删除数据源", "datasource", "delete"),
-            ("datax:task:view", "查看DataX任务", "datax", "view"),
-            ("datax:task:create", "创建DataX任务", "datax", "create"),
-            ("datax:task:update", "更新DataX任务", "datax", "update"),
-            ("datax:task:delete", "删除DataX任务", "datax", "delete"),
-            ("datax:task:execute", "执行DataX任务", "datax", "execute"),
             ("doris:query:execute", "执行Doris查询", "doris", "execute"),
             ("doris:query:save", "保存查询", "doris", "create"),
             ("component:view", "查看组件", "component", "view"),
@@ -145,16 +185,15 @@ async def seed():
         # these mappings later through role management.
         default_role_permissions = {
             "viewer": {
-                "datasource:view", "datax:task:view", "component:view", "system:view",
+                "datasource:view", "component:view", "system:view",
             },
             "analyst": {
-                "datasource:view", "datax:task:view", "component:view", "system:view",
+                "datasource:view", "component:view", "system:view",
                 "doris:query:execute", "doris:query:save",
             },
             "data_engineer": {
                 "datasource:view", "datasource:create", "datasource:update", "datasource:delete",
-                "datax:task:view", "datax:task:create", "datax:task:update",
-                "datax:task:delete", "datax:task:execute", "doris:query:execute",
+                "doris:query:execute",
                 "doris:query:save", "component:view", "system:view",
             },
         }
@@ -177,25 +216,26 @@ async def seed():
             (None, "首页", "menu", "/dashboard", "dashboard/index", "HomeOutlined", 0),
             (None, "数据管理", "directory", "/datasource", "", "DatabaseOutlined", 1),
             (1, "数据源管理", "menu", "/datasource/list", "datasource/index", "", 0),
-            (1, "DataX同步", "menu", "/datax", "datax/index", "", 1),
-            (None, "数据开发", "directory", "/dev", "", "CodeOutlined", 2),
-            (4, "SQL工作台", "menu", "/query", "query/index", "", 0),
-            (4, "数据模型", "menu", "/dev/models", "dev/models/index", "", 1),
-            (4, "发布管理", "menu", "/dev/publish", "dev/publish/index", "", 2),
+            (None, "数据开发", "menu", "/query", "query/index", "CodeOutlined", 2),
             (None, "数据仓库", "directory", "/warehouse", "", "HddOutlined", 3),
-            (8, "库表浏览", "menu", "/warehouse/browse", "warehouse/browse/index", "", 0),
+            (4, "库表浏览", "menu", "/warehouse/browse", "warehouse/browse/index", "", 0),
             (None, "调度中心", "directory", "/schedule", "", "ScheduleOutlined", 4),
-            (10, "任务监控", "menu", "/schedule/monitor", "schedule/monitor/index", "", 0),
+            (6, "任务监控", "menu", "/schedule/monitor", "schedule/monitor/index", "", 0),
             (None, "数据资产", "directory", "/assets", "", "FundOutlined", 5),
-            (12, "数据目录", "menu", "/assets/catalog", "assets/catalog/index", "", 0),
-            (12, "血缘关系", "menu", "/assets/lineage", "assets/lineage/index", "", 1),
+            (8, "数据目录", "menu", "/assets/catalog", "assets/catalog/index", "", 0),
+            (8, "血缘关系", "menu", "/assets/lineage", "assets/lineage/index", "", 1),
+            (8, "数据质量", "menu", "/assets/quality", "assets/quality/index", "", 2),
             (None, "指标中心", "directory", "/metrics", "", "BarChartOutlined", 6),
-            (None, "系统管理", "directory", "/system", "", "SettingOutlined", 7),
+            (None, "数据服务", "directory", "/data-service", "", "ShareAltOutlined", 7),
+            (13, "服务目录", "menu", "/data-service/catalog", "data-service/index", "", 0),
+            (13, "调用监控", "menu", "/data-service/stats", "data-service/stats/index", "", 1),
+            (None, "系统管理", "directory", "/system", "", "SettingOutlined", 8),
             (16, "用户管理", "menu", "/system/user", "system/user/index", "", 0),
             (16, "角色管理", "menu", "/system/role", "system/role/index", "", 1),
             (16, "组件配置", "menu", "/system/component", "system/component/index", "", 2),
             (16, "系统配置", "menu", "/system/config", "system/config/index", "", 3),
             (16, "操作日志", "menu", "/system/log", "system/log/index", "", 4),
+            (16, "MCP管理", "menu", "/system/mcp", "system/mcp/index", "", 5),
         ]
 
         menu_ids = []

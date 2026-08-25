@@ -14,7 +14,6 @@
       <div class="panel metric-list-panel">
         <div class="panel-header">
           <span class="panel-title">指标</span>
-          <el-button type="primary" size="small" :icon="Plus" @click="goCreate">新建</el-button>
         </div>
         <el-input
           v-model="browseKeyword"
@@ -150,13 +149,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { useRoute } from "vue-router";
 import { Plus, Search, RefreshLeft, Refresh, VideoPlay, Delete, DataAnalysis } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import * as echarts from "@/utils/echarts";
 import { cubeApi, metricDefinitionApi } from "@/api";
 
-const router = useRouter();
 const route = useRoute();
 
 const loadingMeta = ref(false);
@@ -305,10 +303,6 @@ async function executeQuery() {
   } finally {
     querying.value = false;
   }
-}
-
-function goCreate() {
-  router.push({ path: "/metrics/definitions", query: { create: "1" } });
 }
 
 // 结果展示

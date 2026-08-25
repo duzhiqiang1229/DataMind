@@ -18,63 +18,27 @@ def _slugify(name: str) -> str:
     return s or "dag"
 
 
-async def _airflow_ssh_config(db: AsyncSession) -> dict:
-    """Load SSH connection params for the Airflow node."""
-    from app.services.component_service import _load_config
-
-    config = await _load_config(db, "airflow")
-    if not config:
-        raise RuntimeError("Airflow component not configured")
-    ssh_password = config.get("ssh_password") or ""
-    if not ssh_password:
-        raise ValueError("请先在 Airflow 组件配置中填写 SSH 密码")
-    return {
-        "host": config.get("ssh_host") or "192.168.1.4",
-        "port": int(config.get("ssh_port") or 22),
-        "user": config.get("ssh_user") or "root",
-        "password": ssh_password,
-        "dags_path": (config.get("dags_path") or "/home/airflow/dags").rstrip("/"),
-    }
+def _dags_root() -> Path:
+    root = Path(os.getenv("AIRFLOW_DAGS_PATH", "/airflow/dags")).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
-async def _read_remote_file(db: AsyncSession, remote_path: str) -> str | None:
-    """Read a text file from the Airflow node via SFTP."""
-    import paramiko
-
-    ssh_cfg = await _airflow_ssh_config(db)
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        ssh_cfg["host"], port=ssh_cfg["port"],
-        username=ssh_cfg["user"], password=ssh_cfg["password"], timeout=15,
-    )
-    try:
-        with client.open_sftp() as sftp:
-            with sftp.open(remote_path, "r") as f:
-                return f.read().decode("utf-8", errors="replace")
-    except FileNotFoundError:
-        return None
-    finally:
-        client.close()
+def _dag_file(fileloc: str) -> Path:
+    """Map Airflow's container path to the shared local DAG directory."""
+    filename = Path(fileloc).name
+    if not filename.endswith(".py") or filename in {".py", "..py"}:
+        raise ValueError("无效的 DAG 文件路径")
+    return _dags_root() / filename
 
 
-async def _write_remote_file(db: AsyncSession, remote_path: str, content: str) -> None:
-    """Write a text file to the Airflow node via SFTP (UTF-8)."""
-    import paramiko
+def _read_dag_file(fileloc: str) -> str | None:
+    path = _dag_file(fileloc)
+    return path.read_text(encoding="utf-8") if path.is_file() else None
 
-    ssh_cfg = await _airflow_ssh_config(db)
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        ssh_cfg["host"], port=ssh_cfg["port"],
-        username=ssh_cfg["user"], password=ssh_cfg["password"], timeout=15,
-    )
-    try:
-        with client.open_sftp() as sftp:
-            with sftp.open(remote_path, "w") as f:
-                f.write(content.encode("utf-8"))
-    finally:
-        client.close()
+
+def _write_dag_file(fileloc: str, content: str) -> None:
+    _dag_file(fileloc).write_text(content, encoding="utf-8", newline="\n")
 
 
 async def create_dag_file(db: AsyncSession, script_name: str, content: str) -> dict:
@@ -85,11 +49,10 @@ async def create_dag_file(db: AsyncSession, script_name: str, content: str) -> d
     """
     if not content or not content.strip():
         raise ValueError("脚本内容不能为空")
-    ssh_cfg = await _airflow_ssh_config(db)
     filename = f"datamind_{_slugify(script_name)}_{uuid.uuid4().hex[:8]}.py"
-    remote_path = f"{ssh_cfg['dags_path']}/{filename}"
-    await _write_remote_file(db, remote_path, content)
-    return {"fileloc": remote_path, "filename": filename}
+    local_path = _dags_root() / filename
+    local_path.write_text(content, encoding="utf-8", newline="\n")
+    return {"fileloc": f"/opt/airflow/dags/{filename}", "filename": filename}
 
 
 async def get_dag_file(db: AsyncSession, dag_id: str) -> Optional[dict]:
@@ -100,7 +63,7 @@ async def get_dag_file(db: AsyncSession, dag_id: str) -> Optional[dict]:
     fileloc = dag.get("fileloc")
     if not fileloc:
         return None
-    content = await _read_remote_file(db, fileloc)
+    content = _read_dag_file(fileloc)
     if content is None:
         return None
     return {"dag_id": dag_id, "fileloc": fileloc, "content": content}
@@ -116,7 +79,7 @@ async def update_dag_file(db: AsyncSession, dag_id: str, content: str) -> Option
     fileloc = dag.get("fileloc")
     if not fileloc:
         return None
-    await _write_remote_file(db, fileloc, content)
+    _write_dag_file(fileloc, content)
     return {"dag_id": dag_id, "fileloc": fileloc}
 
 
@@ -348,7 +311,7 @@ async def retry_dag_run(
         # state endpoint. Retrying must use the dedicated clear endpoint.
         resp = await client._request(
             "POST",
-            f"/api/v1/dags/{dag_id}/clearTaskInstances",
+            f"/api/v2/dags/{dag_id}/clearTaskInstances",
             json={
                 "dag_run_id": run_id,
                 "task_ids": [task_id],
@@ -380,12 +343,27 @@ async def retry_dag_run(
 
 
 async def update_dag_schedule(db: AsyncSession, dag_id: str, schedule_interval: str) -> dict | None:
-    """Update DAG schedule interval via Airflow PATCH API."""
+    """Update the schedule in the shared DAG source file."""
     try:
-        airflow = await get_airflow_client(db)
-        # Use the client's _request method to PATCH the DAG with new schedule
-        resp = await airflow._request("PATCH", f"/api/v1/dags/{dag_id}", json={"schedule_interval": schedule_interval})
-        return resp.json()
+        source = await get_dag_file(db, dag_id)
+        if not source:
+            return None
+        replacement = repr(schedule_interval) if schedule_interval else "None"
+        content, count = re.subn(
+            r"(?m)(\bschedule\s*=\s*)([^,\n)]+)",
+            lambda match: match.group(1) + replacement,
+            source["content"], count=1,
+        )
+        if count == 0:
+            content, count = re.subn(
+                r"(?m)(\bschedule_interval\s*=\s*)([^,\n)]+)",
+                lambda match: match.group(1) + replacement,
+                source["content"], count=1,
+            )
+        if count == 0:
+            raise ValueError("DAG 脚本中未找到 schedule 配置")
+        _write_dag_file(source["fileloc"], content)
+        return {"dag_id": dag_id, "schedule": schedule_interval, "fileloc": source["fileloc"]}
     except RuntimeError:
         return None
     except Exception as e:
@@ -393,188 +371,13 @@ async def update_dag_schedule(db: AsyncSession, dag_id: str, schedule_interval: 
         return None
 
 
-async def deploy_dags(db: AsyncSession) -> dict:
-    """Deploy DAG template files to the Airflow dags folder via SSH/SFTP.
-
-    The SSH connection details (ssh_host/ssh_port/ssh_user/ssh_password/dags_path)
-    are stored in the Airflow component config.
-    """
-    import paramiko
-
-    from app.services.component_service import _load_config
-
-    config = await _load_config(db, "airflow")
-    if not config:
-        raise RuntimeError("Airflow component not configured")
-
-    ssh_host = config.get("ssh_host") or "192.168.1.4"
-    ssh_port = int(config.get("ssh_port") or 22)
-    ssh_user = config.get("ssh_user") or "root"
-    ssh_password = config.get("ssh_password") or ""
-    dags_path = config.get("dags_path") or "/opt/software/airflow/dags"
-
-    if not ssh_password:
-        raise ValueError("请先在 Airflow 组件配置中填写 SSH 密码")
-
-    dags_dir = Path(
-        os.environ.get("AIRFLOW_DAGS_DIR")
-        or (Path(__file__).resolve().parents[3] / "airflow-dags")
-    )
-    files = ["datax_sync_dag.py", "spark_job_dag.py"]
-
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        ssh_host, port=ssh_port, username=ssh_user,
-        password=ssh_password, timeout=15,
-    )
-    sftp = client.open_sftp()
-    try:
-        try:
-            sftp.stat(dags_path)
-        except FileNotFoundError:
-            sftp.mkdir(dags_path)
-
-        uploaded = []
-        for f in files:
-            src = dags_dir / f
-            if not src.exists():
-                continue
-            remote = f"{dags_path.rstrip('/')}/{f}"
-            sftp.put(str(src), remote)
-            uploaded.append(remote)
-    finally:
-        sftp.close()
-        client.close()
-
-    logger.info(f"[airflow] DAG templates deployed to {dags_path}: {uploaded}")
-    return {
-        "uploaded": uploaded,
-        "dags_path": dags_path,
-        "ssh_host": ssh_host,
-    }
-
-
-async def create_dag_task(
-    db: AsyncSession,
-    dag_name: str,
-    task_type: str,
-    task_id: str,
-    schedule: str,
-    description: Optional[str] = None,
-) -> dict:
-    """Create a scheduled DAG that triggers a DataX/Spark task.
-
-    Generates a DAG definition file (using TriggerDagRunOperator to fire the
-    matching datax_sync / spark_job template with the task id) and uploads it
-    to the Airflow dags folder via SFTP.
-    """
-    import uuid
-    import paramiko
-
-    from app.models import DataXTask, SparkTask
-    from app.services.component_service import _load_config
-
-    # Load the target task to validate and get its code
-    task = None
-    if task_type == "datax":
-        result = await db.execute(
-            select(DataXTask).where(DataXTask.id == uuid.UUID(task_id))
-        )
-        task = result.scalar_one_or_none()
-        trigger_dag_id = "datax_sync"
-        task_label = "DataX"
-    elif task_type == "spark":
-        result = await db.execute(
-            select(SparkTask).where(SparkTask.id == uuid.UUID(task_id))
-        )
-        task = result.scalar_one_or_none()
-        trigger_dag_id = "spark_job"
-        task_label = "Spark"
-    else:
-        raise ValueError("task_type 必须是 datax 或 spark")
-
-    if not task:
-        raise ValueError("任务不存在")
-
-    task_code = getattr(task, "task_code", "") or str(uuid.UUID(task_id))
-    dag_id = f"datamind_{task_type}_{task_code}"
-
-    # Build the DAG definition file content
-    content = (
-        f'"""DataMind scheduled DAG: {dag_name}"""\n'
-        "from airflow import DAG\n"
-        "from airflow.operators.trigger_dagrun import TriggerDagRunOperator\n"
-        "from airflow.utils.dates import days_ago\n"
-        "\n"
-        "default_args = {\n"
-        '    "owner": "datamind",\n'
-        '    "retries": 0,\n'
-        "}\n"
-        "\n"
-        f"dag = DAG(\n"
-        f'    dag_id="{dag_id}",\n'
-        f'    description="{dag_name}",\n'
-        f'    schedule="{schedule}",\n'
-        "    start_date=days_ago(1),\n"
-        "    catchup=False,\n"
-        '    tags=["datamind", "scheduled"],\n'
-        "    default_args=default_args,\n"
-        ")\n"
-        "\n"
-        f'trigger_task = TriggerDagRunOperator(\n'
-        f'    task_id="run_{trigger_dag_id}",\n'
-        f'    trigger_dag_id="{trigger_dag_id}",\n'
-        f'    conf={{"task_id": "{task_id}"}},\n'
-        f'    dag=dag,\n'
-        ")\n"
-    )
-
-    # Upload via SFTP
-    config = await _load_config(db, "airflow")
-    if not config:
-        raise RuntimeError("Airflow component not configured")
-    ssh_host = config.get("ssh_host") or "192.168.1.4"
-    ssh_port = int(config.get("ssh_port") or 22)
-    ssh_user = config.get("ssh_user") or "root"
-    ssh_password = config.get("ssh_password") or ""
-    dags_path = config.get("dags_path") or "/home/airflow/dags"
-    if not ssh_password:
-        raise ValueError("请先在 Airflow 组件配置中填写 SSH 密码")
-
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(
-        ssh_host, port=ssh_port, username=ssh_user,
-        password=ssh_password, timeout=15,
-    )
-    sftp = client.open_sftp()
-    try:
-        remote = f"{dags_path.rstrip('/')}/{dag_id}.py"
-        with sftp.open(remote, "w") as f:
-            f.write(content.encode("utf-8"))
-    finally:
-        sftp.close()
-        client.close()
-
-    logger.info(f"[airflow] Created DAG task {dag_id} -> {remote}")
-    return {
-        "dag_id": dag_id,
-        "dag_name": dag_name,
-        "task_type": task_type,
-        "task_code": task_code,
-        "schedule": schedule,
-        "trigger_dag_id": trigger_dag_id,
-        "file": remote,
-    }
-
-
 async def sync_dag_runs(db: AsyncSession) -> dict:
-    """Sync all Airflow DAG runs into airflow_dag_runs for unified monitoring."""
+    """Sync runs and actively collect task-level runtime lineage from Airflow."""
     from datetime import datetime, timezone
 
     from app.models import AirflowDagRun
     from app.services.component_service import get_airflow_client
+    from app.services.runtime_lineage_service import ingest_event
 
     def _parse(iso):
         if not iso:
@@ -598,6 +401,7 @@ async def sync_dag_runs(db: AsyncSession) -> dict:
 
     dags = await airflow.list_dags(limit=100)
     total = 0
+    lineage_candidates: list[dict] = []
     for dag in dags:
         dag_id = dag.get("dag_id")
         if not dag_id:
@@ -627,22 +431,102 @@ async def sync_dag_runs(db: AsyncSession) -> dict:
                 row.end_date = end
                 row.duration_seconds = duration
                 row.run_type = run.get("run_type")
-                row.execution_date = _parse(run.get("execution_date"))
+                row.execution_date = _parse(run.get("logical_date") or run.get("execution_date"))
             else:
-                db.add(AirflowDagRun(
+                row = AirflowDagRun(
                     dag_id=dag_id,
                     dag_run_id=run_id,
                     run_type=run.get("run_type"),
                     state=run.get("state"),
-                    execution_date=_parse(run.get("execution_date")),
+                    execution_date=_parse(run.get("logical_date") or run.get("execution_date")),
                     start_date=start,
                     end_date=end,
                     duration_seconds=duration,
-                ))
+                )
+                db.add(row)
+            if run.get("state") in {"success", "failed"} and row.lineage_status == "pending":
+                lineage_candidates.append({
+                    "dag_id": dag_id, "dag_run_id": run_id, "dag_state": run.get("state"),
+                    "run_type": run.get("run_type"),
+                    "execution_date": _parse(run.get("logical_date") or run.get("execution_date")),
+                })
             total += 1
     await db.commit()
-    logger.info(f"[airflow] synced {total} dag runs from {len(dags)} dags")
-    return {"synced": total, "dags": len(dags)}
+
+    def _extract_log_lineage(log: str) -> tuple[list[str], list[str], str]:
+        """Extract physical reads/writes and SQL from concrete task execution logs."""
+        inputs = {
+            match.lower() for match in re.findall(
+                r"(?i)(?:get query plan for table|BatchScan)\s+[`\"]?([A-Za-z0-9_]+\.[A-Za-z0-9_]+)",
+                log or "",
+            )
+        }
+        outputs = {
+            match.lower() for match in re.findall(
+                r"(?im)INFO\s+-\s+([A-Za-z0-9_]+\.[A-Za-z0-9_]+):\s+(?:load_completed|write_completed|transformed_rows)\b",
+                log or "",
+            )
+        }
+        sql_parts = []
+        for match in re.findall(
+            r"(?im)(?:Executing|Running)\s+statement:\s*(.+?)(?:,\s*parameters:.*)?$", log or ""
+        ):
+            statement = match.strip()
+            if statement and statement not in sql_parts:
+                sql_parts.append(statement)
+        return sorted(inputs - outputs), sorted(outputs), ";\n".join(sql_parts)
+
+    collected_tasks = 0
+    lineage_errors = 0
+    # Bound each sync so large task logs cannot monopolize the API.
+    candidate_limit = 3
+    for candidate in lineage_candidates[:candidate_limit]:
+        try:
+            tasks = await airflow.get_task_instances(candidate["dag_id"], candidate["dag_run_id"])
+        except Exception as exc:
+            logger.warning(f"[airflow] task sync failed for {candidate['dag_id']}: {exc}")
+            lineage_errors += 1
+            continue
+        for task in tasks:
+            state = task.get("state")
+            if state not in {"success", "failed", "upstream_failed"}:
+                continue
+            task_id = task.get("task_id")
+            if not task_id:
+                continue
+            log = ""
+            try:
+                log = await airflow.get_task_log(
+                    candidate["dag_id"], candidate["dag_run_id"], task_id,
+                    max(int(task.get("try_number") or 1), 1),
+                )
+            except Exception as exc:
+                logger.debug(f"[airflow] task log unavailable for {task_id}: {exc}")
+            input_tables, output_tables, executed_sql = _extract_log_lineage(log)
+            try:
+                await ingest_event(db, {
+                    **candidate, "task_id": task_id,
+                    "try_number": max(int(task.get("try_number") or 1), 1),
+                    "state": "success" if state == "success" else "failed",
+                    "operator_type": task.get("operator_name") or task.get("operator"),
+                    "sql": executed_sql,
+                    "input_tables": input_tables, "output_tables": output_tables,
+                    "start_date": _parse(task.get("start_date")),
+                    "end_date": _parse(task.get("end_date")),
+                    "error_message": None if state == "success" else f"Airflow task state: {state}",
+                })
+                collected_tasks += 1
+            except Exception as exc:
+                await db.rollback()
+                lineage_errors += 1
+                logger.warning(f"[airflow] runtime lineage ingest failed for {task_id}: {exc}")
+    logger.info(
+        f"[airflow] synced {total} runs from {len(dags)} dags; collected {collected_tasks} task records"
+    )
+    return {
+        "synced": total, "dags": len(dags), "lineage_tasks": collected_tasks,
+        "lineage_candidates": min(len(lineage_candidates), candidate_limit), "lineage_errors": lineage_errors,
+    }
 
 
 async def list_dag_runs_page(
@@ -678,5 +562,32 @@ async def list_dag_runs_page(
             "start_date": r.start_date.isoformat() if r.start_date else None,
             "end_date": r.end_date.isoformat() if r.end_date else None,
             "duration_seconds": r.duration_seconds,
+            "task_count": r.task_count,
+            "success_task_count": r.success_task_count,
+            "failed_task_count": r.failed_task_count,
+            "input_asset_count": r.input_asset_count,
+            "output_asset_count": r.output_asset_count,
+            "lineage_status": r.lineage_status,
+            "lineage_collected_at": r.lineage_collected_at.isoformat() if r.lineage_collected_at else None,
         })
     return items, total
+
+
+async def list_recorded_task_runs(db: AsyncSession, dag_run_record_id: uuid.UUID) -> list[dict]:
+    """Return task-level callback records belonging to a synced DAG run."""
+    from app.models import AirflowTaskRun
+
+    rows = list((await db.execute(
+        select(AirflowTaskRun)
+        .where(AirflowTaskRun.dag_run_record_id == dag_run_record_id)
+        .order_by(AirflowTaskRun.start_date.asc().nullsfirst(), AirflowTaskRun.task_id)
+    )).scalars().all())
+    return [{
+        "id": str(row.id), "task_id": row.task_id, "try_number": row.try_number,
+        "operator_type": row.operator_type, "state": row.state,
+        "input_tables": row.input_tables or [], "output_tables": row.output_tables or [],
+        "affected_rows": row.affected_rows, "error_message": row.error_message,
+        "start_date": row.start_date.isoformat() if row.start_date else None,
+        "end_date": row.end_date.isoformat() if row.end_date else None,
+        "duration_seconds": row.duration_seconds,
+    } for row in rows]

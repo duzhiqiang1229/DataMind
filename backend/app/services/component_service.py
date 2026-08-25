@@ -43,9 +43,16 @@ async def _load_config(db: AsyncSession, component_code: str) -> dict | None:
     else:
         config["credentials"] = {}
 
-    # Inside the DataMind compose network, reach Cube by its service name.
-    if component_code == "cube" and os.getenv("DATAMIND_IN_DOCKER") == "true":
-        config["base_url"] = "http://cube:4000"
+    # Inside the DataMind compose network, use service DNS names. Host-facing
+    # addresses can be unreachable from containers when their ports are bound
+    # only to loopback or blocked by host firewall rules.
+    if os.getenv("DATAMIND_IN_DOCKER") == "true":
+        internal_urls = {
+            "airflow": "http://airflow-api-server:8080",
+            "cube": "http://cube:4000",
+        }
+        if component_code in internal_urls:
+            config["base_url"] = internal_urls[component_code]
 
     return config
 
@@ -117,20 +124,6 @@ async def get_cube_client(db: AsyncSession):
     return client
 
 
-async def get_openmetadata_client(db: AsyncSession):
-    """Get or create OpenMetadataClient from DB config."""
-    if "openmetadata" in _client_cache:
-        return _client_cache["openmetadata"]
-
-    from app.integrations.openmetadata_client import OpenMetadataClient
-    config = await _load_config(db, "openmetadata")
-    if not config:
-        raise RuntimeError("OpenMetadata component not configured.")
-    client = OpenMetadataClient(config)
-    _client_cache["openmetadata"] = client
-    return client
-
-
 def clear_client_cache(component_code: str | None = None):
     """Clear cached client(s) — call after config update."""
     if component_code:
@@ -170,9 +163,6 @@ COMPONENT_META = {
     "airflow":      {"name": "Airflow 调度服务",    "type": "scheduler",  "icon": "Timer"},
     "doris":        {"name": "Doris 数仓引擎",      "type": "olap",       "icon": "Coin"},
     "cube":         {"name": "Cube 语义指标引擎",   "type": "semantic",   "icon": "DataAnalysis"},
-    "openmetadata": {"name": "OpenMetadata 治理平台","type": "governance", "icon": "Files"},
-    "datax":        {"name": "DataX 数据同步",       "type": "etl",        "icon": "Switch"},
-    "spark":        {"name": "Spark 计算引擎",       "type": "compute",    "icon": "Cpu"},
 }
 
 
@@ -308,7 +298,6 @@ async def health_check(db: AsyncSession, component_code: str) -> HealthCheckResp
             "airflow": get_airflow_client,
             "doris": get_doris_client,
             "cube": get_cube_client,
-            "openmetadata": get_openmetadata_client,
         }
         getter = client_map.get(component_code)
         if not getter:

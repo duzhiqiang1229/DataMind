@@ -1,4 +1,4 @@
-"""ETL script model: multi-language (sql/python/pyspark) script management."""
+"""SQL development script model."""
 import uuid
 from datetime import datetime
 
@@ -10,13 +10,13 @@ from app.core.database import Base
 
 
 class EtlScript(Base):
-    """An ETL script written in SQL / Python / PySpark."""
+    """A reusable SQL development script."""
     __tablename__ = "etl_scripts"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     script_name: Mapped[str] = mapped_column(String(100), nullable=False)
     script_code: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    language: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # sql/sparksql/pyspark/python
+    language: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # sql
     content: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     schedule_cron: Mapped[str | None] = mapped_column(String(100))

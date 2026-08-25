@@ -9,7 +9,7 @@ from loguru import logger
 class ComponentAdapter(ABC):
     """
     Abstract base for all external component integrations.
-    Each adapter wraps a specific component (Airflow, Doris, Cube, OpenMetadata).
+    Each adapter wraps a specific component (Airflow, Doris or Cube).
 
     Connection config (base_url, auth) is loaded from component_configs table
     and passed in at initialization time — no hardcoded URLs.

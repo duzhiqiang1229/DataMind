@@ -28,6 +28,7 @@ async def create_category(db: AsyncSession, req: MetricCategoryCreate) -> dict:
         category_name=req.category_name,
         category_code=req.category_code,
         description=req.description,
+        sort_order=req.sort_order,
     )
     db.add(category)
     await db.commit()

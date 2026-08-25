@@ -10,6 +10,7 @@ class MetricCategoryCreate(BaseModel):
     category_name: str = Field(..., max_length=100, description="分类名称")
     category_code: str = Field(..., max_length=100, description="分类编码")
     description: Optional[str] = Field(None, max_length=500, description="描述")
+    sort_order: int = Field(default=0, description="排序值，越小越靠前")
 
 
 class MetricCategoryUpdate(BaseModel):

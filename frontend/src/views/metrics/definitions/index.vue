@@ -4,7 +4,10 @@
       <template #header>
         <div class="card-header">
           <span>指标定义</span>
-          <el-button type="primary" :icon="Plus" @click="openCreate">新建指标</el-button>
+          <div>
+            <el-button @click="openCategoryManager">分类管理</el-button>
+            <el-button type="primary" :icon="Plus" @click="openCreate">新建指标</el-button>
+          </div>
         </div>
       </template>
 
@@ -36,37 +39,37 @@
         <el-select v-model="search.category_id" placeholder="分类" clearable filterable style="width: 150px;" @change="handleSearch">
           <el-option v-for="c in categories" :key="c.id" :label="c.category_name" :value="c.id" />
         </el-select>
+        <el-select v-model="search.metric_type" placeholder="指标类型" clearable style="width: 140px;" @change="handleSearch">
+          <el-option label="原子指标" value="atomic" />
+          <el-option label="派生指标" value="derived" />
+          <el-option label="复合指标" value="composite" />
+        </el-select>
         <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
         <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
       </div>
 
       <el-table :data="definitions" v-loading="loading" border>
         <el-table-column prop="metric_name" label="指标名称" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="cube_name" label="Cube" width="150" show-overflow-tooltip />
-            <el-table-column prop="cube_measure" label="度量" width="180" show-overflow-tooltip />
-            <el-table-column label="来源表" width="170" show-overflow-tooltip>
-              <template #default="{ row }">{{ cubeTable(row.cube_name) || '-' }}</template>
-            </el-table-column>
-            <el-table-column label="分类" width="110">
+        <el-table-column label="指标类型" width="100">
+          <template #default="{ row }"><el-tag size="small" :type="metricTypeTag(row.metric_type)">{{ metricTypeLabel(row.metric_type) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="分类" min-width="130">
           <template #default="{ row }">
             <el-tag size="small" effect="plain">{{ categoryName(row.category_id) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="业务域" width="90">
+        <el-table-column label="业务域" min-width="120">
           <template #default="{ row }">{{ row.business_domain || '-' }}</template>
         </el-table-column>
-            <el-table-column prop="unit" label="单位" width="70">
-              <template #default="{ row }">{{ row.unit || '-' }}</template>
-            </el-table-column>
-            <el-table-column label="状态" width="90" align="center">
-              <template #default="{ row }">
-                <el-tag size="small" :type="row.status === 'published' || row.status === 'active' ? 'success' : 'info'">
-                  {{ statusLabel(row.status) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-        <el-table-column label="维度" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">{{ (row.dimensions || []).join(', ') || '-' }}</template>
+        <el-table-column prop="unit" label="单位" width="90">
+          <template #default="{ row }">{{ row.unit || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.status === 'published' || row.status === 'active' ? 'success' : 'info'">
+              {{ statusLabel(row.status) }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
@@ -97,6 +100,15 @@
           <el-col :span="12">
             <el-form-item label="指标名称" prop="metric_name">
               <el-input v-model="form.metric_name" placeholder="如：应收金额" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="指标类型" prop="metric_type">
+              <el-select v-model="form.metric_type" style="width: 100%;">
+                <el-option label="原子指标" value="atomic" />
+                <el-option label="派生指标" value="derived" />
+                <el-option label="复合指标" value="composite" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -177,6 +189,49 @@
         <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="categoryManagerVisible" title="指标分类管理" width="780px">
+      <div class="category-toolbar">
+        <span class="category-hint">分类用于统一组织指标，在新建和编辑指标时选择。</span>
+        <el-button type="primary" :icon="Plus" @click="openCategoryEdit()">新建分类</el-button>
+      </div>
+      <el-table :data="categories" v-loading="categoryLoading" border stripe>
+        <el-table-column prop="category_name" label="分类名称" min-width="150" />
+        <el-table-column prop="category_code" label="分类编码" min-width="150" />
+        <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.description || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="sort_order" label="排序" width="80" align="right" />
+        <el-table-column label="操作" width="130" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openCategoryEdit(row)">编辑</el-button>
+            <el-button link type="danger" @click="deleteCategory(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!categoryLoading && !categories.length" description="暂无分类，请新建指标分类" />
+    </el-dialog>
+
+    <el-dialog v-model="categoryEditVisible" :title="categoryEditId ? '编辑分类' : '新建分类'" width="520px" append-to-body>
+      <el-form ref="categoryFormRef" :model="categoryForm" :rules="categoryRules" label-width="90px">
+        <el-form-item label="分类名称" prop="category_name">
+          <el-input v-model="categoryForm.category_name" maxlength="100" placeholder="如：财务指标" />
+        </el-form-item>
+        <el-form-item label="分类编码" prop="category_code">
+          <el-input v-model="categoryForm.category_code" maxlength="100" placeholder="如：finance" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="categoryForm.sort_order" :min="0" :max="9999" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="说明">
+          <el-input v-model="categoryForm.description" type="textarea" :rows="3" maxlength="500" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="categoryEditVisible = false">取消</el-button>
+        <el-button type="primary" :loading="categorySaving" @click="saveCategory">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -194,7 +249,7 @@ const loading = ref(false);
 const definitions = ref<any[]>([]);
 const categories = ref<any[]>([]);
 const pagination = reactive({ page: 1, page_size: 20, total: 0 });
-const search = reactive({ keyword: "", category_id: "" });
+const search = reactive({ keyword: "", category_id: "", metric_type: "" });
 
 const cubeCount = computed(() => {
   const set = new Set<string>();
@@ -207,9 +262,24 @@ const isEdit = ref(false);
 const submitting = ref(false);
 const editId = ref("");
 const formRef = ref<FormInstance>();
+const categoryManagerVisible = ref(false);
+const categoryEditVisible = ref(false);
+const categoryLoading = ref(false);
+const categorySaving = ref(false);
+const categoryEditId = ref("");
+const categoryFormRef = ref<FormInstance>();
+const categoryForm = reactive({ category_name: "", category_code: "", description: "", sort_order: 0 });
+const categoryRules = {
+  category_name: [{ required: true, message: "请输入分类名称", trigger: "blur" }],
+  category_code: [
+    { required: true, message: "请输入分类编码", trigger: "blur" },
+    { pattern: /^[A-Za-z][A-Za-z0-9_-]*$/, message: "编码须以字母开头，只能包含字母、数字、下划线和短横线", trigger: "blur" },
+  ],
+};
 
 const defaultForm = {
   metric_name: "",
+  metric_type: "atomic",
   cube_name: "",
   cube_measure: "",
   category_id: "",
@@ -225,6 +295,7 @@ const form = reactive<any>({ ...defaultForm });
 
 const formRules = {
   metric_name: [{ required: true, message: "请输入指标名称", trigger: "blur" }],
+  metric_type: [{ required: true, message: "请选择指标类型", trigger: "change" }],
   cube_name: [{ required: true, message: "请选择 Cube", trigger: "change" }],
   cube_measure: [{ required: true, message: "请选择度量", trigger: "change" }],
 };
@@ -242,10 +313,6 @@ const cubeInfoMap = computed(() => {
   });
   return map;
 });
-
-function cubeTable(cubeName: string): string {
-  return cubeInfoMap.value[cubeName]?.sql_table || "";
-}
 
 function statusLabel(status: string): string {
   const map: Record<string, string> = { draft: "草稿", published: "已发布", active: "已发布" };
@@ -292,6 +359,7 @@ async function loadDefinitions() {
       page_size: pagination.page_size,
       keyword: search.keyword || undefined,
       category_id: search.category_id || undefined,
+      metric_type: search.metric_type || undefined,
     });
     definitions.value = res.items || [];
     pagination.total = res.total || 0;
@@ -308,7 +376,7 @@ function handleSearch() {
 }
 
 function handleReset() {
-  Object.assign(search, { keyword: "", category_id: "" });
+  Object.assign(search, { keyword: "", category_id: "", metric_type: "" });
   pagination.page = 1;
   loadDefinitions();
 }
@@ -317,6 +385,14 @@ function categoryName(id: string | null): string {
   if (!id) return "-";
   const c = categories.value.find((x) => x.id === id);
   return c ? c.category_name : "-";
+}
+
+function metricTypeLabel(value?: string): string {
+  return ({ atomic: "原子指标", derived: "派生指标", composite: "复合指标" } as Record<string, string>)[value || "atomic"] || "原子指标";
+}
+
+function metricTypeTag(value?: string): "primary" | "success" | "warning" {
+  return value === "derived" ? "warning" : value === "composite" ? "success" : "primary";
 }
 
 function goQuery(row: any) {
@@ -335,6 +411,7 @@ function openEdit(row: any) {
   editId.value = row.id;
   Object.assign(form, {
     metric_name: row.metric_name || "",
+    metric_type: row.metric_type || "atomic",
     cube_name: row.cube_name || "",
     cube_measure: row.cube_measure || "",
     category_id: row.category_id || "",
@@ -357,6 +434,7 @@ async function handleSubmit() {
     try {
       const payload = {
         metric_name: form.metric_name,
+        metric_type: form.metric_type || "atomic",
         cube_name: form.cube_name,
         cube_measure: form.cube_measure,
         category_id: form.category_id || null,
@@ -420,12 +498,66 @@ function resetForm() {
 }
 
 async function loadCategories() {
+  categoryLoading.value = true;
   try {
     const res = await metricCategoryApi.list();
     categories.value = res || [];
   } catch {
     // handled
+  } finally {
+    categoryLoading.value = false;
   }
+}
+
+async function openCategoryManager() {
+  categoryManagerVisible.value = true;
+  await loadCategories();
+}
+
+function openCategoryEdit(row?: any) {
+  categoryEditId.value = row?.id || "";
+  Object.assign(categoryForm, {
+    category_name: row?.category_name || "",
+    category_code: row?.category_code || "",
+    description: row?.description || "",
+    sort_order: row?.sort_order || 0,
+  });
+  categoryEditVisible.value = true;
+}
+
+async function saveCategory() {
+  if (!categoryFormRef.value) return;
+  const valid = await categoryFormRef.value.validate().catch(() => false);
+  if (!valid) return;
+  categorySaving.value = true;
+  try {
+    const payload = {
+      category_name: categoryForm.category_name.trim(),
+      category_code: categoryForm.category_code.trim(),
+      description: categoryForm.description.trim() || null,
+      sort_order: categoryForm.sort_order || 0,
+    };
+    if (categoryEditId.value) await metricCategoryApi.update(categoryEditId.value, payload);
+    else await metricCategoryApi.create(payload);
+    ElMessage.success(categoryEditId.value ? "分类已更新" : "分类已创建");
+    categoryEditVisible.value = false;
+    await loadCategories();
+  } finally {
+    categorySaving.value = false;
+  }
+}
+
+async function deleteCategory(row: any) {
+  await ElMessageBox.confirm(
+    `确认删除分类“${row.category_name}”？已关联指标将变为未分类。`,
+    "删除分类",
+    { type: "warning" },
+  );
+  await metricCategoryApi.delete(row.id);
+  if (search.category_id === row.id) search.category_id = "";
+  if (form.category_id === row.id) form.category_id = "";
+  ElMessage.success("分类已删除");
+  await Promise.all([loadCategories(), loadDefinitions()]);
 }
 
 onMounted(async () => {
@@ -448,6 +580,18 @@ onMounted(async () => {
 .page-card {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
+}
+
+.category-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.category-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 
 .stat-row {

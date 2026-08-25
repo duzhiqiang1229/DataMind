@@ -121,7 +121,7 @@ async function loadDags() {
 }
 
 function dagSchedule(row: any): string {
-  const si = row.schedule_interval;
+  const si = row.timetable_summary || row.schedule_interval;
   if (!si) return "";
   return typeof si === "string" ? si : si.value || "";
 }
@@ -136,9 +136,14 @@ const currentFileloc = ref("");
 const editorRef = ref<HTMLElement | null>(null);
 let cmInstance: any = null;
 
-const DAG_TEMPLATE = `from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
+const DAG_TEMPLATE = `import json
+import logging
+import os
+import urllib.request
+from datetime import datetime, timezone
+
+from airflow.sdk import DAG
+from airflow.providers.standard.operators.python import PythonOperator
 
 default_args = {"owner": "datamind", "retries": 0}
 
@@ -146,18 +151,64 @@ dag = DAG(
     dag_id="example_dag",
     description="示例调度脚本",
     schedule="0 2 * * *",
-    start_date=days_ago(1),
+    start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
     catchup=False,
     tags=["datamind"],
     default_args=default_args,
 )
 
 
+SQL = """-- 将这里替换为任务实际执行的 INSERT/CREATE TABLE AS SELECT SQL"""
+
+
+def report_lineage(context, state):
+    api_url = os.environ.get("DATAMIND_API_URL", "")
+    token = os.environ.get("LINEAGE_EVENT_TOKEN") or os.environ.get("EXECUTOR_TOKEN", "")
+    if not api_url or not token:
+        return
+    payload = {
+        "dag_id": context["dag"].dag_id,
+        "dag_run_id": context["dag_run"].run_id,
+        "task_id": context["task_instance"].task_id,
+        "try_number": context["task_instance"].try_number,
+        "state": state,
+        "operator_type": context["task"].__class__.__name__,
+        "sql": SQL,
+        "datasource_name": "Doris 数仓",
+        "default_database": "dwd",
+        "start_date": context["task_instance"].start_date.isoformat() if context["task_instance"].start_date else None,
+    }
+    request = urllib.request.Request(
+        api_url.rstrip("/") + "/api/v1/internal/lineage/events",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-Lineage-Token": token},
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(request, timeout=15).read()
+    except Exception:
+        logging.exception("DataMind lineage callback failed; active run sync will retry collection")
+
+
+def lineage_success(context):
+    report_lineage(context, "success")
+
+
+def lineage_failure(context):
+    report_lineage(context, "failed")
+
+
 def run_task():
     print("task running")
 
 
-t1 = PythonOperator(task_id="run_task", python_callable=run_task, dag=dag)
+t1 = PythonOperator(
+    task_id="run_task",
+    python_callable=run_task,
+    on_success_callback=lineage_success,
+    on_failure_callback=lineage_failure,
+    dag=dag,
+)
 `;
 
 function ensureEditor() {
