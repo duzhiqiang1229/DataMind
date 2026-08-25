@@ -1,6 +1,6 @@
 {
   "name": "datamind-frontend",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "DataMind 企业智能数据平台前端",
   "type": "module",
   "scripts": {

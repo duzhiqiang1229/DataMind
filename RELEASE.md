@@ -1,6 +1,10 @@
-# DataMind 1.0.0 正式发布基线
+# DataMind 1.0.1 正式发布基线
 
 发布日期：2026-08-25
+
+## 1.0.1 修复
+
+- 修复 MCP 客户端新建窗口请求 200 条用户数据、超过后端 100 条分页上限，导致服务用户下拉框为空的问题。
 
 ## 发布范围
 
@@ -17,8 +21,8 @@ OpenMetadata、DataX、Spark 和旧 ETL 页面不属于本发布版本。
 ## 固化策略
 
 - 产品版本由 `VERSION`、`.env` 中的 `APP_VERSION` 和 `DATAMIND_VERSION` 共同确定。
-- DataMind 后端、MCP、执行器共用 `datamind-backend:1.0.0` 镜像。
-- 前端使用 `datamind-frontend:1.0.0`，Airflow 使用 `datamind-airflow:1.0.0`。
+- DataMind 后端、MCP、执行器共用 `datamind-backend:1.0.1` 镜像。
+- 前端使用 `datamind-frontend:1.0.1`，Airflow 使用 `datamind-airflow:1.0.1`。
 - PostgreSQL、Redis、Cube 与 Cube Store 使用不可漂移的镜像摘要。
 - Python、Airflow Provider 与前端 npm 依赖均使用锁定版本或锁文件。
 - `.env`、运行日志、Airflow 密码文件和数据库备份不纳入 Git。
@@ -47,7 +51,7 @@ sh scripts/release.sh
 
 - Compose 配置可以解析，12 个常驻服务全部运行。
 - DataMind、后端、MCP、Cube、Airflow 健康接口全部返回 HTTP 200。
-- 后端报告版本 `1.0.0`。
+- 后端报告版本 `1.0.1`。
 - Alembic 当前数据库版本为唯一 `head`。
 - PostgreSQL 备份文件大于 1 KB，并生成 SHA-256 校验文件。
 

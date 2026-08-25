@@ -1,6 +1,6 @@
 # DataMind 企业智能数据平台
 
-DataMind 通过一套 Docker Compose 部署前端、后端、MCP、Airflow 3.3.1、PostgreSQL、Redis 与 Cube。当前正式发布基线为 `1.0.0`，版本号以根目录 `VERSION` 为准。
+DataMind 通过一套 Docker Compose 部署前端、后端、MCP、Airflow 3.3.1、PostgreSQL、Redis 与 Cube。当前正式发布基线为 `1.0.1`，版本号以根目录 `VERSION` 为准。
 
 ## 部署要求
 

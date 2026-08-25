@@ -151,7 +151,7 @@ const mcpEndpoint = computed(() => `${window.location.protocol}//${window.locati
 const filteredCapabilities = computed(() => { const keyword = capabilityKeyword.value.trim().toLowerCase(); return capabilities.value.filter((item:any) => (!moduleFilter.value || item.module === moduleFilter.value) && (!keyword || `${item.name} ${item.description} ${item.scope}`.toLowerCase().includes(keyword))); });
 
 async function loadClients() { loading.value = true; try { clients.value = await mcpManagementApi.clients() || []; } finally { loading.value = false; } }
-async function loadUsers() { const res: any = await userApi.list({ page: 1, page_size: 200, status: "active" }); users.value = res.items || []; }
+async function loadUsers() { const res: any = await userApi.list({ page: 1, page_size: 100, status: "active" }); users.value = res.items || []; }
 async function loadAudit() { auditLoading.value = true; try { toolCalls.value = await mcpManagementApi.toolCalls(200) || []; } finally { auditLoading.value = false; } }
 async function loadCapabilities() { capabilityLoading.value = true; try { const result:any = await mcpManagementApi.capabilities(); capabilities.value = result.items || []; capabilityModules.value = result.modules || []; } finally { capabilityLoading.value = false; } }
 function handleTabChange(name: any) { if (name === "audit") loadAudit(); if (name === "capabilities" && !capabilities.value.length) loadCapabilities(); if (name === "changes") changeSetCenterRef.value?.loadData(); }
