@@ -1,6 +1,6 @@
 # DataMind 企业智能数据平台
 
-DataMind 通过一套 Docker Compose 部署前端、后端、MCP、Airflow 3.3.1、PostgreSQL、Redis 与 Cube。当前正式发布基线为 `1.0.1`，版本号以根目录 `VERSION` 为准。
+DataMind 通过一套 Docker Compose 部署前端、后端、MCP、Airflow 3.3.1、PostgreSQL、Redis、Cube 与 PySpark 本地运行时。当前正式发布基线为 `1.1.0`，版本号以根目录 `VERSION` 为准。
 
 ## 部署要求
 
@@ -90,6 +90,8 @@ docker compose -f docker-compose.prod.yml ps
 - `airflow`：Airflow 元数据
 
 Airflow 使用 `LocalExecutor`；任务进程由 Scheduler 在本机容器内启动。DataMind 与 Airflow 通过 `airflow/dags/` 共享 DAG 文件，不需要 SSH/SFTP。
+
+Airflow 镜像内置 Java 17 与 PySpark 4.2.0，可解析包含 `pyspark` 的 Python DAG，并通过 `PythonOperator` 运行本地模式 PySpark 任务。默认 `SPARK_MASTER=local[2]`，适合当前单机部署和中小型作业；大规模任务后续应改为提交到独立 Spark 集群。
 
 ## 访问地址
 

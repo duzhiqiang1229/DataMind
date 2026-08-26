@@ -1,4 +1,5 @@
 """Airflow DAG management service: list, trigger, pause/resume, logs, retry."""
+import ast
 import os
 import re
 import uuid
@@ -38,7 +39,45 @@ def _read_dag_file(fileloc: str) -> str | None:
 
 
 def _write_dag_file(fileloc: str, content: str) -> None:
-    _dag_file(fileloc).write_text(content, encoding="utf-8", newline="\n")
+    path = _dag_file(fileloc)
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    temporary.write_text(content, encoding="utf-8", newline="\n")
+    temporary.replace(path)
+
+
+def inspect_dag_python(content: str) -> dict:
+    """Validate Python syntax and report whether a DAG uses PySpark.
+
+    Airflow DAG files are executable Python. Syntax is validated before the
+    shared file is replaced so one malformed edit cannot create a parser
+    error. PySpark imports are detected throughout the AST, including imports
+    intentionally placed inside task callables to keep DAG parsing lightweight.
+    """
+    if not content or not content.strip():
+        raise ValueError("脚本内容不能为空")
+    if len(content.encode("utf-8")) > 1_000_000:
+        raise ValueError("DAG脚本不能超过1MB")
+    try:
+        tree = ast.parse(content, filename="airflow_dag.py")
+    except SyntaxError as exc:
+        location = f"第{exc.lineno}行"
+        if exc.offset:
+            location += f"第{exc.offset}列"
+        raise ValueError(f"Python语法错误（{location}）：{exc.msg}") from exc
+
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
+    uses_pyspark = any(name == "pyspark" or name.startswith("pyspark.") for name in imports)
+    return {
+        "language": "python",
+        "runtime": "pyspark" if uses_pyspark else "python",
+        "uses_pyspark": uses_pyspark,
+        "imports": sorted(imports),
+    }
 
 
 async def create_dag_file(db: AsyncSession, script_name: str, content: str) -> dict:
@@ -47,12 +86,15 @@ async def create_dag_file(db: AsyncSession, script_name: str, content: str) -> d
     The file is a self-contained Airflow DAG definition; the scheduler parses
     it automatically, so DAG name / schedule / status come from the script.
     """
-    if not content or not content.strip():
-        raise ValueError("脚本内容不能为空")
+    inspection = inspect_dag_python(content)
     filename = f"datamind_{_slugify(script_name)}_{uuid.uuid4().hex[:8]}.py"
     local_path = _dags_root() / filename
-    local_path.write_text(content, encoding="utf-8", newline="\n")
-    return {"fileloc": f"/opt/airflow/dags/{filename}", "filename": filename}
+    _write_dag_file(str(local_path), content)
+    return {
+        "fileloc": f"/opt/airflow/dags/{filename}",
+        "filename": filename,
+        **inspection,
+    }
 
 
 async def get_dag_file(db: AsyncSession, dag_id: str) -> Optional[dict]:
@@ -71,8 +113,7 @@ async def get_dag_file(db: AsyncSession, dag_id: str) -> Optional[dict]:
 
 async def update_dag_file(db: AsyncSession, dag_id: str, content: str) -> Optional[dict]:
     """Overwrite the source file of a DAG; Airflow re-parses automatically."""
-    if not content or not content.strip():
-        raise ValueError("脚本内容不能为空")
+    inspection = inspect_dag_python(content)
     dag = await get_dag(db, dag_id)
     if not dag:
         return None
@@ -80,7 +121,7 @@ async def update_dag_file(db: AsyncSession, dag_id: str, content: str) -> Option
     if not fileloc:
         return None
     _write_dag_file(fileloc, content)
-    return {"dag_id": dag_id, "fileloc": fileloc}
+    return {"dag_id": dag_id, "fileloc": fileloc, **inspection}
 
 
 async def list_dags(db: AsyncSession, limit: int = 100, offset: int = 0) -> list[dict]:

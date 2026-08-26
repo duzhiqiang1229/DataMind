@@ -1,6 +1,13 @@
-# DataMind 1.0.1 正式发布基线
+# DataMind 1.1.0 正式发布基线
 
-发布日期：2026-08-25
+发布日期：2026-08-26
+
+## 1.1.0 新增
+
+- Airflow 3.3.1 镜像加入 Java 17 与 PySpark 4.2.0。
+- 调度脚本编辑器新增 PySpark DAG 模板，默认以 `local[2]` 运行。
+- DAG 保存前执行 Python AST 语法校验并识别 PySpark 依赖，避免错误脚本直接覆盖已生效文件。
+- 普通 Python DAG 与 PySpark DAG 继续共用 Airflow LocalExecutor、运行日志和任务监控。
 
 ## 1.0.1 修复
 
@@ -16,13 +23,13 @@
 - 智能化接入：MCP 工具、资源、提示词、作用域、审计与变更集
 - 基础设施：单 PostgreSQL 容器双数据库、Redis、Cube、Airflow 3.3.1 LocalExecutor
 
-OpenMetadata、DataX、Spark 和旧 ETL 页面不属于本发布版本。
+OpenMetadata、DataX、独立 Spark 集群组件和旧 ETL 页面不属于本发布版本；PySpark 仅作为 Airflow 单机任务运行时提供。
 
 ## 固化策略
 
 - 产品版本由 `VERSION`、`.env` 中的 `APP_VERSION` 和 `DATAMIND_VERSION` 共同确定。
-- DataMind 后端、MCP、执行器共用 `datamind-backend:1.0.1` 镜像。
-- 前端使用 `datamind-frontend:1.0.1`，Airflow 使用 `datamind-airflow:1.0.1`。
+- DataMind 后端、MCP、执行器共用 `datamind-backend:1.1.0` 镜像。
+- 前端使用 `datamind-frontend:1.1.0`，Airflow 使用 `datamind-airflow:1.1.0`。
 - PostgreSQL、Redis、Cube 与 Cube Store 使用不可漂移的镜像摘要。
 - Python、Airflow Provider 与前端 npm 依赖均使用锁定版本或锁文件。
 - `.env`、运行日志、Airflow 密码文件和数据库备份不纳入 Git。
@@ -51,7 +58,7 @@ sh scripts/release.sh
 
 - Compose 配置可以解析，12 个常驻服务全部运行。
 - DataMind、后端、MCP、Cube、Airflow 健康接口全部返回 HTTP 200。
-- 后端报告版本 `1.0.1`。
+- 后端报告版本 `1.1.0`。
 - Alembic 当前数据库版本为唯一 `head`。
 - PostgreSQL 备份文件大于 1 KB，并生成 SHA-256 校验文件。
 

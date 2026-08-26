@@ -51,12 +51,18 @@
       <el-form-item v-if="editMode" label="文件位置">
         <el-input :model-value="currentFileloc" disabled />
       </el-form-item>
+      <el-form-item v-if="!editMode" label="脚本模板">
+        <el-radio-group v-model="scriptRuntime" @change="handleTemplateChange">
+          <el-radio-button value="python">Python</el-radio-button>
+          <el-radio-button value="pyspark">PySpark</el-radio-button>
+        </el-radio-group>
+      </el-form-item>
       <el-form-item label="脚本内容">
         <div ref="editorRef" class="script-editor"></div>
       </el-form-item>
     </el-form>
     <div class="dialog-hint">
-      脚本为 Airflow DAG 定义（Python），请包含 dag_id 和 schedule；保存后系统自动推送到 dags 目录并由 Airflow 解析。
+      脚本为 Airflow DAG 定义（Python/PySpark），请包含 dag_id 和 schedule；保存前校验 Python 语法，保存后由 Airflow 自动解析。PySpark 默认使用 LocalExecutor 容器内的 local[2] 模式。
     </div>
     <template #footer>
       <el-button @click="scriptDialogVisible = false">取消</el-button>
@@ -131,6 +137,7 @@ const scriptDialogVisible = ref(false);
 const editMode = ref(false);
 const saving = ref(false);
 const scriptName = ref("");
+const scriptRuntime = ref<"python" | "pyspark">("python");
 const currentDagId = ref("");
 const currentFileloc = ref("");
 const editorRef = ref<HTMLElement | null>(null);
@@ -211,6 +218,56 @@ t1 = PythonOperator(
 )
 `;
 
+const PYSPARK_DAG_TEMPLATE = `import os
+from datetime import datetime, timezone
+
+from airflow.sdk import DAG
+from airflow.providers.standard.operators.python import PythonOperator
+
+default_args = {"owner": "datamind", "retries": 0}
+
+dag = DAG(
+    dag_id="example_pyspark_dag",
+    description="PySpark 本地模式示例任务",
+    schedule="0 3 * * *",
+    start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    catchup=False,
+    tags=["datamind", "pyspark"],
+    default_args=default_args,
+)
+
+
+def run_pyspark_job():
+    from pyspark.sql import SparkSession, functions as F
+
+    spark = (
+        SparkSession.builder
+        .master(os.environ.get("SPARK_MASTER", "local[2]"))
+        .appName("datamind-example-pyspark")
+        .config("spark.sql.shuffle.partitions", "8")
+        .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse")
+        .getOrCreate()
+    )
+    try:
+        result = (
+            spark.range(0, 100)
+            .withColumn("bucket", F.col("id") % 10)
+            .groupBy("bucket")
+            .count()
+            .orderBy("bucket")
+        )
+        result.show(20, truncate=False)
+    finally:
+        spark.stop()
+
+
+run_job = PythonOperator(
+    task_id="run_pyspark_job",
+    python_callable=run_pyspark_job,
+    dag=dag,
+)
+`;
+
 function ensureEditor() {
   if (!cmInstance && editorRef.value) {
     cmInstance = CodeMirror(editorRef.value, {
@@ -235,6 +292,7 @@ function setEditorContent(content: string) {
 
 function openCreate() {
   editMode.value = false;
+  scriptRuntime.value = "python";
   scriptName.value = "";
   currentDagId.value = "";
   currentFileloc.value = "";
@@ -243,6 +301,10 @@ function openCreate() {
     ensureEditor();
     setEditorContent(DAG_TEMPLATE);
   });
+}
+
+function handleTemplateChange(value: string | number | boolean | undefined) {
+  setEditorContent(value === "pyspark" ? PYSPARK_DAG_TEMPLATE : DAG_TEMPLATE);
 }
 
 async function openEdit(row: any) {
@@ -277,8 +339,8 @@ async function handleSaveScript() {
   saving.value = true;
   try {
     if (editMode.value) {
-      await airflowApi.updateDagFile(currentDagId.value, content);
-      ElMessage.success("已保存，Airflow 将自动重新解析");
+      const res: any = await airflowApi.updateDagFile(currentDagId.value, content);
+      ElMessage.success(`已保存${res?.uses_pyspark ? "（PySpark）" : ""}，Airflow 将自动重新解析`);
     } else {
       if (!scriptName.value.trim()) {
         ElMessage.warning("请输入脚本名称");
@@ -288,7 +350,7 @@ async function handleSaveScript() {
         script_name: scriptName.value.trim(),
         content,
       });
-      ElMessage.success(`已部署：${res.fileloc}，Airflow 1~5 分钟内自动解析`);
+      ElMessage.success(`已部署${res?.uses_pyspark ? " PySpark" : ""}：${res.fileloc}，Airflow 1~5 分钟内自动解析`);
     }
     scriptDialogVisible.value = false;
     loadDags();
