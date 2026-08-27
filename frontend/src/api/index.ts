@@ -38,7 +38,7 @@ export const datasourceApi = {
     return request.get(`/datasources/${id}/databases`);
   },
   testConnection(id: string) {
-    return request.post(`/datasources/${id}/test`);
+    return request.post(`/datasources/${id}/test`, undefined, { timeout: 300000 });
   },
   query(id: string, sql: string, limit: number) {
     return request.post(`/datasources/${id}/query`, { sql, limit });

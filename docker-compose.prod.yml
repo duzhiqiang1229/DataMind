@@ -6,7 +6,7 @@
 name: datamind
 
 x-airflow-common: &airflow-common
-  image: datamind-airflow:${DATAMIND_VERSION:-1.1.1}
+  image: datamind-airflow:${DATAMIND_VERSION:-1.1.2}
   env_file:
     - ./.env
   environment: &airflow-common-env
@@ -92,7 +92,7 @@ services:
 
   # Backend - FastAPI
   backend:
-    image: datamind-backend:${DATAMIND_VERSION:-1.1.1}
+    image: datamind-backend:${DATAMIND_VERSION:-1.1.2}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -107,7 +107,7 @@ services:
       - REDIS_PORT=6379
       - APP_DEBUG=false
       - APP_ENV=production
-      - APP_VERSION=${DATAMIND_VERSION:-1.1.1}
+      - APP_VERSION=${DATAMIND_VERSION:-1.1.2}
       - DATAMIND_IN_DOCKER=true
       - EXECUTOR_URL=http://executor:8010
       - CUBE_COMPOSE_DIR=/datamind
@@ -141,7 +141,7 @@ services:
 
   # DataMind MCP - agent-facing Streamable HTTP server.
   mcp-server:
-    image: datamind-backend:${DATAMIND_VERSION:-1.1.1}
+    image: datamind-backend:${DATAMIND_VERSION:-1.1.2}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -160,7 +160,7 @@ services:
       - REDIS_PORT=6379
       - APP_DEBUG=false
       - APP_ENV=production
-      - APP_VERSION=${DATAMIND_VERSION:-1.1.1}
+      - APP_VERSION=${DATAMIND_VERSION:-1.1.2}
       - DATAMIND_IN_DOCKER=true
       - AIRFLOW_DAGS_PATH=/airflow/dags
       - CUBE_MODEL_CUBES_DIR=/datamind/cube/model/cubes
@@ -181,7 +181,7 @@ services:
 
   # Restricted executor - the only service allowed to access Docker Engine.
   executor:
-    image: datamind-backend:${DATAMIND_VERSION:-1.1.1}
+    image: datamind-backend:${DATAMIND_VERSION:-1.1.2}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -213,7 +213,7 @@ services:
 
   # Frontend - Nginx serving built Vue app + API proxy
   frontend:
-    image: datamind-frontend:${DATAMIND_VERSION:-1.1.1}
+    image: datamind-frontend:${DATAMIND_VERSION:-1.1.2}
     build:
       context: ./frontend
       dockerfile: Dockerfile

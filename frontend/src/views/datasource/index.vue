@@ -290,14 +290,39 @@ async function handleTest(row: any) {
   try {
     const res = await datasourceApi.testConnection(row.id);
     if (res?.success) {
-      ElMessage.success(`连接成功 (${res.version || "OK"})`);
+      const sync = res.metadata_sync || {};
+      const syncStatus = res.metadata_sync_status;
+      const lines = [
+        "连接状态：成功",
+        `数据库版本：${res.version || "已连接"}`,
+        `元数据同步：${res.metadata_sync_message || "已完成"}`,
+      ];
+      if (syncStatus === "success" || syncStatus === "partial") {
+        lines.push(`同步物理表：${sync.tables || 0} 张`);
+        lines.push(`同步字段：${sync.columns || 0} 个`);
+      }
+      await ElMessageBox.alert(lines.join("\n"), "数据源连接结果", {
+        type: syncStatus === "failed" || syncStatus === "partial" ? "warning" : "success",
+        confirmButtonText: "确定",
+        customClass: "datamind-message-box",
+        center: true,
+      });
     } else {
-      ElMessage.error(`连接失败: ${res?.message || "未知错误"}`);
+      await ElMessageBox.alert(
+        `连接状态：失败\n失败原因：${res?.message || "未知错误"}`,
+        "数据源连接结果",
+        {
+          type: "error",
+          confirmButtonText: "确定",
+          customClass: "datamind-message-box",
+          center: true,
+        },
+      );
     }
-    loadData();
   } catch {
-    // handled by interceptor
+    // HTTP errors are handled by the interceptor; closing the result box needs no action.
   } finally {
+    await loadData();
     testingId.value = "";
   }
 }
@@ -369,12 +394,15 @@ async function handleSubmit() {
         if (!payload.password) delete payload.password;
         await datasourceApi.update(editId.value, payload);
         ElMessage.success("更新成功");
+        dialogVisible.value = false;
+        await handleTest({ id: editId.value });
       } else {
-        await datasourceApi.create(form);
+        const created: any = await datasourceApi.create(form);
         ElMessage.success("创建成功");
+        dialogVisible.value = false;
+        await handleTest({ id: created.id });
       }
-      dialogVisible.value = false;
-      loadData();
+      await loadData();
     } catch {
       // handled by interceptor
     } finally {
@@ -384,7 +412,17 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: any) {
-  await ElMessageBox.confirm(`确认删除数据源 "${row.source_name}"?`, "提示", { type: "warning" });
+  try {
+    await ElMessageBox.confirm(`确认删除数据源“${row.source_name}”？`, "删除确认", {
+      type: "warning",
+      confirmButtonText: "确认删除",
+      cancelButtonText: "取消",
+      customClass: "datamind-message-box",
+      center: true,
+    });
+  } catch {
+    return;
+  }
   await datasourceApi.delete(row.id);
   ElMessage.success("删除成功");
   loadData();

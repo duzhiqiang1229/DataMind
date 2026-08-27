@@ -1,6 +1,13 @@
-# DataMind 1.1.1 正式发布基线
+# DataMind 1.1.2 正式发布基线
 
 发布日期：2026-08-27
+
+## 1.1.2 修复
+
+- 驾驶舱资产总数改为统计数据目录中状态有效的物理表。
+- 新增或编辑数据源后自动执行连接测试，连接成功后立即同步该数据源的表和字段元数据。
+- 数据源连接结果改为中文居中弹窗，并显示数据库版本、同步表数和字段数。
+- 全局确认、取消及表单对话框统一使用中文并在屏幕中央显示。
 
 ## 1.1.1 修复
 
@@ -36,8 +43,8 @@ OpenMetadata、DataX、独立 Spark 集群组件和旧 ETL 页面不属于本发
 ## 固化策略
 
 - 产品版本由 `VERSION`、`.env` 中的 `APP_VERSION` 和 `DATAMIND_VERSION` 共同确定。
-- DataMind 后端、MCP、执行器共用 `datamind-backend:1.1.1` 镜像。
-- 前端使用 `datamind-frontend:1.1.1`，Airflow 使用 `datamind-airflow:1.1.1`。
+- DataMind 后端、MCP、执行器共用 `datamind-backend:1.1.2` 镜像。
+- 前端使用 `datamind-frontend:1.1.2`，Airflow 使用 `datamind-airflow:1.1.2`。
 - PostgreSQL、Redis、Cube 与 Cube Store 使用不可漂移的镜像摘要。
 - Python、Airflow Provider 与前端 npm 依赖均使用锁定版本或锁文件。
 - `.env`、运行日志、Airflow 密码文件和数据库备份不纳入 Git。
@@ -66,7 +73,7 @@ sh scripts/release.sh
 
 - Compose 配置可以解析，12 个常驻服务全部运行。
 - DataMind、后端、MCP、Cube、Airflow 健康接口全部返回 HTTP 200。
-- 后端报告版本 `1.1.1`。
+- 后端报告版本 `1.1.2`。
 - Alembic 当前数据库版本为唯一 `head`。
 - PostgreSQL 备份文件大于 1 KB，并生成 SHA-256 校验文件。
 

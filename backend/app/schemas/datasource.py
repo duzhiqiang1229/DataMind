@@ -68,3 +68,6 @@ class ConnectionTestResponse(BaseModel):
     message: str
     version: Optional[str] = None  # 数据库版本信息
     tested_at: datetime
+    metadata_sync_status: Optional[str] = None
+    metadata_sync_message: Optional[str] = None
+    metadata_sync: Optional[dict] = None

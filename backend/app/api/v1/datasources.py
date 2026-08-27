@@ -12,7 +12,7 @@ from app.schemas.datasource import (
     ConnectionTestResponse,
 )
 from app.schemas.common import ResponseOK, PageResponse, PageResult
-from app.services import datasource_service
+from app.services import data_asset_service, datasource_service
 
 router = APIRouter()
 
@@ -55,7 +55,7 @@ async def create_datasource(
 async def get_datasource(datasource_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     result = await datasource_service.get_datasource(db, __import__("uuid").UUID(datasource_id))
     if not result:
-        return ResponseOK(code=404, message="Data source not found")
+        return ResponseOK(code=404, message="数据源不存在")
     return ResponseOK(data=result)
 
 
@@ -73,7 +73,7 @@ async def update_datasource(
         db, __import__("uuid").UUID(datasource_id), req
     )
     if not result:
-        return ResponseOK(code=404, message="Data source not found")
+        return ResponseOK(code=404, message="数据源不存在")
     return ResponseOK(data=result)
 
 
@@ -84,7 +84,7 @@ async def update_datasource(
 async def delete_datasource(datasource_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     ok = await datasource_service.delete_datasource(db, __import__("uuid").UUID(datasource_id))
     if not ok:
-        return ResponseOK(code=404, message="Data source not found")
+        return ResponseOK(code=404, message="数据源不存在")
     return ResponseOK()
 
 
@@ -93,7 +93,21 @@ async def delete_datasource(datasource_id: str, db: AsyncSession = Depends(get_d
     dependencies=[Depends(require_permission("datasource:update"))],
 )
 async def test_connection(datasource_id: str, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
-    result = await datasource_service.test_connection(db, __import__("uuid").UUID(datasource_id))
+    parsed_id = uuid.UUID(datasource_id)
+    result = await datasource_service.test_connection(db, parsed_id)
+    if result.success:
+        try:
+            sync_result = await data_asset_service.sync_catalog(db, parsed_id)
+            result.metadata_sync = sync_result
+            if sync_result.get("errors"):
+                result.metadata_sync_status = "partial"
+                result.metadata_sync_message = "连接成功，但部分元数据采集失败"
+            else:
+                result.metadata_sync_status = "success"
+                result.metadata_sync_message = "元数据采集同步成功"
+        except Exception as exc:
+            result.metadata_sync_status = "failed"
+            result.metadata_sync_message = f"连接成功，但元数据同步失败：{str(exc)[:300]}"
     return ResponseOK(data=result)
 
 

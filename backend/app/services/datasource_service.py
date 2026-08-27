@@ -129,7 +129,7 @@ async def test_connection(db: AsyncSession, ds_id: uuid.UUID) -> ConnectionTestR
     result = await db.execute(select(DataSource).where(DataSource.id == ds_id))
     ds = result.scalar_one_or_none()
     if not ds:
-        return ConnectionTestResponse(success=False, message="Data source not found", tested_at=datetime.now(timezone.utc))
+        return ConnectionTestResponse(success=False, message="数据源不存在", tested_at=datetime.now(timezone.utc))
 
     password = decrypt_value(ds.password_encrypted)
     now = datetime.now(timezone.utc)
@@ -159,7 +159,7 @@ async def test_connection(db: AsyncSession, ds_id: uuid.UUID) -> ConnectionTestR
             conn.close()
         else:
             return ConnectionTestResponse(
-                success=False, message=f"Unsupported type: {ds.source_type}", tested_at=now
+                success=False, message=f"暂不支持测试该数据源类型：{ds.source_type}", tested_at=now
             )
 
         # update test result
@@ -169,14 +169,14 @@ async def test_connection(db: AsyncSession, ds_id: uuid.UUID) -> ConnectionTestR
         )
         await db.commit()
 
-        return ConnectionTestResponse(success=True, message="Connection OK", version=version, tested_at=now)
+        return ConnectionTestResponse(success=True, message="连接成功", version=version, tested_at=now)
     except Exception as e:
         await db.execute(
             update(DataSource).where(DataSource.id == ds_id)
             .values(last_connection_test=now, last_connection_ok=False)
         )
         await db.commit()
-        return ConnectionTestResponse(success=False, message=str(e), tested_at=now)
+        return ConnectionTestResponse(success=False, message=f"数据库连接失败：{e}", tested_at=now)
 
 
 async def execute_query(

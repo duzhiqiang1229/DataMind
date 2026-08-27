@@ -129,7 +129,18 @@ a {
 }
 
 /* Dialog */
+.el-overlay-dialog {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
 .el-dialog {
+  margin: 0 auto !important;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
   border-radius: $radius-lg !important;
   overflow: hidden;
 
@@ -147,12 +158,26 @@ a {
 
   .el-dialog__body {
     padding: 24px;
+    overflow-y: auto;
   }
 
   .el-dialog__footer {
     padding: 12px 24px 20px;
     border-top: 1px solid #f0f0f0;
   }
+}
+
+/* MessageBox: confirmation, cancellation and status dialogs stay centered. */
+.el-overlay-message-box {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 24px;
+}
+
+.datamind-message-box .el-message-box__message {
+  white-space: pre-line;
+  line-height: 1.8;
 }
 
 /* Drawer */

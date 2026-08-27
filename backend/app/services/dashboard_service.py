@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from app.models import (
-    DataSource, QueryHistory, DataModel,
+    DataSource, QueryHistory, AssetObject,
     ComponentConfig, AirflowDagRun, MetricDefinition, DataServiceApi,
 )
 from app.services.airflow_service import list_dags as list_airflow_dags
@@ -19,8 +19,13 @@ async def get_stats(db: AsyncSession) -> dict:
     # data sources
     ds_total = (await db.execute(select(func.count(DataSource.id)))).scalar_one()
 
-    # 自建资产目录当前以已登记的数据模型作为资产基数，后续由资产采集表替代。
-    asset_total = (await db.execute(select(func.count(DataModel.id)))).scalar_one()
+    # 资产总数与数据目录口径一致：仅统计当前有效的物理表资产。
+    asset_total = (await db.execute(
+        select(func.count(AssetObject.id)).where(
+            AssetObject.asset_type == "table",
+            AssetObject.status == "active",
+        )
+    )).scalar_one()
 
     # 数据任务：调度任务中运行中的任务数 = Airflow 中未暂停的 DAG 数
     airflow_dags = await list_airflow_dags(db, limit=100, offset=0)
