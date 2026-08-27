@@ -2,6 +2,7 @@
 import hashlib
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import unquote, urlparse
 
 import sqlglot
 from sqlglot import expressions as exp
@@ -73,6 +74,61 @@ def _explicit_refs(values: list[str], default_database: str | None) -> list[dict
     return refs
 
 
+def _dataset_refs(values: list[dict], default_database: str | None) -> list[dict]:
+    """Convert OpenLineage datasets to physical table references."""
+    refs = []
+    for dataset in values:
+        if not isinstance(dataset, dict):
+            continue
+        name = str(dataset.get("name") or "").strip()
+        if not name:
+            continue
+        parts = [part.strip("`\" ") for part in name.split(".") if part.strip("`\" ")]
+        if not parts:
+            continue
+        namespace = str(dataset.get("namespace") or "").strip()
+        datasource_name = None
+        marker = "datamind://datasource/"
+        if namespace.lower().startswith(marker):
+            datasource_name = unquote(namespace[len(marker):]) or None
+        refs.append({
+            "name": parts[-1],
+            "database": parts[-2] if len(parts) >= 2 else default_database,
+            "catalog": parts[-3] if len(parts) >= 3 else None,
+            "namespace": namespace or None,
+            "datasource_name": datasource_name,
+        })
+    return refs
+
+
+def _dedupe_refs(refs: list[dict]) -> list[dict]:
+    unique: dict[tuple[str, str, str], dict] = {}
+    for ref in refs:
+        key = (
+            str(ref.get("catalog") or "").lower(),
+            str(ref.get("database") or "").lower(),
+            str(ref.get("name") or "").lower(),
+        )
+        if key[2]:
+            existing = unique.get(key)
+            if not existing or ref.get("namespace") or ref.get("datasource_name"):
+                unique[key] = ref
+    return list(unique.values())
+
+
+def _dedupe_datasets(values: list[dict]) -> list[dict]:
+    unique: dict[tuple[str, str], dict] = {}
+    for value in values:
+        if not isinstance(value, dict) or not value.get("name"):
+            continue
+        normalized = {
+            "namespace": str(value.get("namespace") or ""),
+            "name": str(value["name"]),
+        }
+        unique[(normalized["namespace"].lower(), normalized["name"].lower())] = normalized
+    return list(unique.values())
+
+
 async def _resolve_asset(
     db: AsyncSession, ref: dict, datasource_name: str | None,
 ) -> AssetObject | None:
@@ -86,8 +142,22 @@ async def _resolve_asset(
     )
     if ref.get("database"):
         query = query.where(func.lower(AssetObject.database_name) == str(ref["database"]).lower())
-    if datasource_name:
-        query = query.where(func.lower(DataSource.source_name) == datasource_name.lower())
+    effective_source_name = ref.get("datasource_name") or datasource_name
+    if effective_source_name:
+        query = query.where(func.lower(DataSource.source_name) == str(effective_source_name).lower())
+    elif ref.get("namespace"):
+        namespace = str(ref["namespace"])
+        if namespace.startswith("jdbc:"):
+            namespace = namespace[5:]
+        parsed = urlparse(namespace)
+        if parsed.hostname:
+            query = query.where(func.lower(DataSource.host) == parsed.hostname.lower())
+        try:
+            namespace_port = parsed.port
+        except ValueError:
+            namespace_port = None
+        if namespace_port:
+            query = query.where(DataSource.port == namespace_port)
     matches = list((await db.execute(query.limit(2))).scalars().all())
     return matches[0] if len(matches) == 1 else None
 
@@ -106,6 +176,8 @@ async def ingest_event(db: AsyncSession, payload: dict) -> dict:
         )
         db.add(dag_run)
         await db.flush()
+    elif payload.get("dag_state"):
+        dag_run.state = payload["dag_state"]
 
     sql = payload.get("sql") or ""
     sql_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest() if sql else None
@@ -123,24 +195,58 @@ async def ingest_event(db: AsyncSession, payload: dict) -> dict:
         )
         db.add(task_run)
         await db.flush()
-    task_run.operator_type = payload.get("operator_type")
-    task_run.state = payload["state"]
-    task_run.executed_sql = sql or None
-    task_run.sql_hash = sql_hash
-    task_run.affected_rows = payload.get("affected_rows")
-    task_run.error_message = payload.get("error_message")
-    task_run.start_date = payload.get("start_date")
-    task_run.end_date = payload.get("end_date") or now
+    if payload.get("operator_type"):
+        task_run.operator_type = payload["operator_type"]
+    if task_run.state not in {"success", "failed"} or payload["state"] in {"success", "failed"}:
+        task_run.state = payload["state"]
+    if sql:
+        task_run.executed_sql = sql
+        task_run.sql_hash = sql_hash
+    if payload.get("affected_rows") is not None:
+        task_run.affected_rows = payload["affected_rows"]
+    if payload.get("error_message"):
+        task_run.error_message = payload["error_message"]
+    if payload.get("start_date") and (
+        task_run.start_date is None or payload["start_date"] < task_run.start_date
+    ):
+        task_run.start_date = payload["start_date"]
+    if payload.get("end_date"):
+        task_run.end_date = payload["end_date"]
+    elif payload["state"] in {"success", "failed"}:
+        task_run.end_date = now
+    if payload.get("openlineage_run_id"):
+        task_run.openlineage_run_id = payload["openlineage_run_id"]
+    if payload.get("openlineage_job_namespace"):
+        task_run.openlineage_job_namespace = payload["openlineage_job_namespace"]
+    if payload.get("openlineage_job_name"):
+        task_run.openlineage_job_name = payload["openlineage_job_name"]
     if task_run.start_date and task_run.end_date:
         task_run.duration_seconds = max(int((task_run.end_date - task_run.start_date).total_seconds()), 0)
 
-    explicit_inputs = _explicit_refs(payload.get("input_tables") or [], payload.get("default_database"))
-    explicit_outputs = _explicit_refs(payload.get("output_tables") or [], payload.get("default_database"))
-    parsed_inputs, parsed_outputs = ([], []) if explicit_inputs and explicit_outputs else parse_runtime_sql(
-        sql, payload.get("default_database")
+    default_database = payload.get("default_database")
+    explicit_inputs = _explicit_refs(payload.get("input_tables") or [], default_database)
+    explicit_outputs = _explicit_refs(payload.get("output_tables") or [], default_database)
+    input_datasets = _dedupe_datasets(
+        (task_run.openlineage_inputs or []) + (payload.get("input_datasets") or [])
     )
-    input_refs = explicit_inputs or parsed_inputs
-    output_refs = explicit_outputs or parsed_outputs
+    output_datasets = _dedupe_datasets(
+        (task_run.openlineage_outputs or []) + (payload.get("output_datasets") or [])
+    )
+    if "input_datasets" in payload or payload.get("merge_lineage"):
+        task_run.openlineage_inputs = input_datasets
+    if "output_datasets" in payload or payload.get("merge_lineage"):
+        task_run.openlineage_outputs = output_datasets
+    dataset_inputs = _dataset_refs(input_datasets, default_database)
+    dataset_outputs = _dataset_refs(output_datasets, default_database)
+    has_both_sides = (explicit_inputs or dataset_inputs) and (explicit_outputs or dataset_outputs)
+    parsed_inputs, parsed_outputs = (
+        ([], []) if has_both_sides else parse_runtime_sql(sql, default_database)
+    )
+    input_refs = _dedupe_refs(dataset_inputs + explicit_inputs + parsed_inputs)
+    output_refs = _dedupe_refs(dataset_outputs + explicit_outputs + parsed_outputs)
+    if payload.get("merge_lineage"):
+        input_refs = _dedupe_refs(_explicit_refs(task_run.input_tables or [], default_database) + input_refs)
+        output_refs = _dedupe_refs(_explicit_refs(task_run.output_tables or [], default_database) + output_refs)
     task_run.input_tables = [".".join(filter(None, [ref.get("database"), ref["name"]])) for ref in input_refs]
     task_run.output_tables = [".".join(filter(None, [ref.get("database"), ref["name"]])) for ref in output_refs]
 
@@ -200,6 +306,8 @@ async def ingest_event(db: AsyncSession, payload: dict) -> dict:
         dag_run.lineage_status = "partial" if unresolved else "collected"
     elif has_incomplete_lineage:
         dag_run.lineage_status = "partial"
+    elif any(run.state == "running" for run in runs):
+        dag_run.lineage_status = "pending"
     else:
         dag_run.lineage_status = "none"
     dag_run.lineage_collected_at = now

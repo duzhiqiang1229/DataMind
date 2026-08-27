@@ -1,6 +1,14 @@
-# DataMind 1.1.0 正式发布基线
+# DataMind 1.1.1 正式发布基线
 
-发布日期：2026-08-26
+发布日期：2026-08-27
+
+## 1.1.1 修复
+
+- 安装并启用 Airflow OpenLineage Listener，通过认证 HTTP Transport 将事件发送到 DataMind。
+- 新增 DataMind OpenLineage RunEvent 接收端，支持 Airflow 任务事件与 Spark 子事件按 `parentRunId` 合并。
+- 新增 `DorisSQLOperator` 与 `DorisSparkSubmitOperator`，显式输出 Doris 输入/输出 Dataset Facet，并为 Spark 启用 OpenLineage Listener。
+- 持久化 OpenLineage Dataset namespace，避免任务完成事件覆盖 Spark 运行时采集的数据集。
+- 发布校验增加 OpenLineage Provider、namespace 和 Spark Listener JAR 检查。
 
 ## 1.1.0 新增
 
@@ -28,8 +36,8 @@ OpenMetadata、DataX、独立 Spark 集群组件和旧 ETL 页面不属于本发
 ## 固化策略
 
 - 产品版本由 `VERSION`、`.env` 中的 `APP_VERSION` 和 `DATAMIND_VERSION` 共同确定。
-- DataMind 后端、MCP、执行器共用 `datamind-backend:1.1.0` 镜像。
-- 前端使用 `datamind-frontend:1.1.0`，Airflow 使用 `datamind-airflow:1.1.0`。
+- DataMind 后端、MCP、执行器共用 `datamind-backend:1.1.1` 镜像。
+- 前端使用 `datamind-frontend:1.1.1`，Airflow 使用 `datamind-airflow:1.1.1`。
 - PostgreSQL、Redis、Cube 与 Cube Store 使用不可漂移的镜像摘要。
 - Python、Airflow Provider 与前端 npm 依赖均使用锁定版本或锁文件。
 - `.env`、运行日志、Airflow 密码文件和数据库备份不纳入 Git。
@@ -58,7 +66,7 @@ sh scripts/release.sh
 
 - Compose 配置可以解析，12 个常驻服务全部运行。
 - DataMind、后端、MCP、Cube、Airflow 健康接口全部返回 HTTP 200。
-- 后端报告版本 `1.1.0`。
+- 后端报告版本 `1.1.1`。
 - Alembic 当前数据库版本为唯一 `head`。
 - PostgreSQL 备份文件大于 1 KB，并生成 SHA-256 校验文件。
 

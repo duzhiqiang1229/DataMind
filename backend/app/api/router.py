@@ -24,6 +24,7 @@ from app.api.v1 import (
     cube_model,
     data_assets,
     runtime_lineage,
+    openlineage,
     mcp_management,
 )
 
@@ -32,6 +33,7 @@ api_router = APIRouter()
 # Auth (no auth required)
 api_router.include_router(auth.router, prefix="/auth", tags=["认证"])
 api_router.include_router(runtime_lineage.router, prefix="/internal/lineage", tags=["运行血缘回调"])
+api_router.include_router(openlineage.router, prefix="/internal/openlineage", tags=["OpenLineage事件"])
 
 # User & RBAC
 api_router.include_router(users.router, prefix="/users", tags=["用户管理"])

@@ -20,7 +20,7 @@ class RuntimeLineageEvent(BaseModel):
     dag_run_id: str = Field(min_length=1, max_length=250)
     task_id: str = Field(min_length=1, max_length=250)
     try_number: int = Field(default=1, ge=1)
-    state: str = Field(pattern="^(success|failed)$")
+    state: str = Field(pattern="^(running|success|failed)$")
     dag_state: str | None = None
     run_type: str | None = None
     operator_type: str | None = None
@@ -29,6 +29,8 @@ class RuntimeLineageEvent(BaseModel):
     default_database: str | None = None
     input_tables: list[str] = Field(default_factory=list)
     output_tables: list[str] = Field(default_factory=list)
+    input_datasets: list[dict] = Field(default_factory=list)
+    output_datasets: list[dict] = Field(default_factory=list)
     affected_rows: int | None = None
     error_message: str | None = None
     execution_date: datetime | None = None

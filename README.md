@@ -1,6 +1,6 @@
 # DataMind 企业智能数据平台
 
-DataMind 通过一套 Docker Compose 部署前端、后端、MCP、Airflow 3.3.1、PostgreSQL、Redis、Cube 与 PySpark 本地运行时。当前正式发布基线为 `1.1.0`，版本号以根目录 `VERSION` 为准。
+DataMind 通过一套 Docker Compose 部署前端、后端、MCP、Airflow 3.3.1、PostgreSQL、Redis、Cube 与 PySpark 本地运行时。当前正式发布基线为 `1.1.1`，版本号以根目录 `VERSION` 为准。
 
 ## 部署要求
 
@@ -92,6 +92,36 @@ docker compose -f docker-compose.prod.yml ps
 Airflow 使用 `LocalExecutor`；任务进程由 Scheduler 在本机容器内启动。DataMind 与 Airflow 通过 `airflow/dags/` 共享 DAG 文件，不需要 SSH/SFTP。
 
 Airflow 镜像内置 Java 17 与 PySpark 4.2.0，可解析包含 `pyspark` 的 Python DAG，并通过 `PythonOperator` 运行本地模式 PySpark 任务。默认 `SPARK_MASTER=local[2]`，适合当前单机部署和中小型作业；大规模任务后续应改为提交到独立 Spark 集群。
+
+### OpenLineage 运行血缘
+
+Airflow OpenLineage Listener 已通过认证 HTTP Transport 接入 DataMind。标准 SQL Operator 会由 Provider 提取 Dataset；Spark 提交任务应使用 DataMind Operator，并且 `datasource_name` 必须与数据源管理中的真实名称一致：
+
+```python
+from datamind_operators import DorisSQLOperator, DorisSparkSubmitOperator
+
+build_fee = DorisSQLOperator(
+    task_id="build_fee",
+    conn_id="doris_default",
+    database="dwd",
+    sql="INSERT INTO dwd.dwd_fee SELECT * FROM ods.ods_fee",
+    datasource_name="Doris 数仓",
+    input_tables=["ods.ods_fee"],
+    output_tables=["dwd.dwd_fee"],
+)
+
+load_fee = DorisSparkSubmitOperator(
+    task_id="load_fee",
+    application="/opt/airflow/dags/jobs/load_fee.py",
+    conn_id="spark_default",
+    datasource_name="Doris 数仓",
+    default_database="dwd",
+    input_tables=["ods.ods_fee"],
+    output_tables=["dwd.dwd_fee"],
+)
+```
+
+Operator 会在 Airflow 任务事件中提供显式输入/输出 Dataset，同时为 Spark 注入父任务标识、HTTP Transport 和 `OpenLineageSparkListener`。当 Doris Connector 的 Spark LogicalPlan 无法识别目标表时，以显式 `input_tables`、`output_tables` 为准；未配置完整时任务日志会输出警告。
 
 ## 访问地址
 

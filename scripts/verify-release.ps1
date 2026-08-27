@@ -55,6 +55,23 @@ if ($LASTEXITCODE -ne 0 -or $migration -notmatch '\(head\)') {
     throw "DataMind database migration is not at Alembic head."
 }
 
+docker exec airflow-scheduler sh -lc "airflow providers list | grep -q apache-airflow-providers-openlineage"
+if ($LASTEXITCODE -ne 0) { throw "Airflow OpenLineage provider is not installed." }
+docker exec airflow-scheduler sh -lc 'test -r "$SPARK_OPENLINEAGE_JAR"'
+if ($LASTEXITCODE -ne 0) { throw "Spark OpenLineage listener JAR is missing." }
+docker exec airflow-scheduler python -c 'import sys; sys.path.insert(0, "/opt/airflow/plugins"); from datamind_operators import DorisSQLOperator, DorisSparkSubmitOperator'
+if ($LASTEXITCODE -ne 0) { throw "DataMind Doris OpenLineage operators cannot be imported." }
+$lineageNamespace = (docker exec airflow-scheduler airflow config get-value openlineage namespace 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $lineageNamespace -ne "datamind-airflow") {
+    throw "Airflow OpenLineage namespace is not configured."
+}
+$lineageDisabled = (docker exec airflow-scheduler airflow config get-value openlineage disabled 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $lineageDisabled -ne "False") {
+    throw "Airflow OpenLineage listener is disabled."
+}
+docker exec airflow-scheduler python -c 'import json, os, urllib.request; request = urllib.request.Request("http://backend:8000/api/v1/internal/openlineage/health", headers={"Authorization": "Bearer " + os.environ["LINEAGE_EVENT_TOKEN"]}); assert json.load(urllib.request.urlopen(request, timeout=10))["status"] == "ok"'
+if ($LASTEXITCODE -ne 0) { throw "Airflow cannot authenticate to the DataMind OpenLineage receiver." }
+
 $version = (Get-Content -LiteralPath (Join-Path $projectRoot "VERSION") -Raw).Trim()
 $health = Invoke-RestMethod -Uri "http://127.0.0.1:$(Env-Port 'BACKEND_PORT' 8000)/health" -TimeoutSec 15
 if ($health.version -ne $version) { throw "Backend version $($health.version) does not match release $version." }
