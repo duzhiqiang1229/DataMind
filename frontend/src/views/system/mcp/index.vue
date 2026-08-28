@@ -130,7 +130,7 @@ import ChangeSetCenter from "./change-set-center.vue";
 
 const scopeOptions = [
   "metadata:read", "modeling:read", "modeling:draft",
-  "development:read", "development:draft", "metrics:read", "metrics:draft",
+  "development:read", "development:draft", "metrics:read", "metrics:draft", "metrics:execute",
   "development:execute", "scheduling:read", "scheduling:write", "scheduling:execute",
   "lineage:read", "changeset:draft", "changeset:commit",
   "data_service:read", "data_service:draft", "data_service:execute",

@@ -129,7 +129,8 @@ Operator 会在 Airflow 任务事件中提供显式输入/输出 Dataset，同�
 - 后端健康检查：`http://服务器地址:8000/health`
 - DataMind MCP：`http://服务器地址:8001/mcp`
 - MCP健康检查：`http://服务器地址:8001/health`
-- MCP能力：数据源/表/字段读取、数据域/业务过程/模型设计、SQL预览、Airflow调度、物理表目录与运行血缘、质量规则与检测、Cube建模、指标建设、数据API草稿/预览/发布、AppKey与调用监控
+- MCP能力：数据源/表/字段读取、数据域/业务过程/模型设计、SQL预览、Airflow调度、物理表目录与运行血缘、质量规则与检测、Cube建模与受控刷新、指标建设、数据API草稿/预览/发布、AppKey与调用监控
+- MCP刷新Cube：客户端需授予 `metrics:execute`，智能体在获得用户明确确认后调用 `refresh_cube(user_confirmation=true)`；已有客户端需在“MCP管理”中补充该授权
 - Airflow：`http://服务器地址:8082`
 - Airflow 健康检查：`http://服务器地址:8082/api/v2/monitor/health`
 - Cube：`http://服务器地址:4000`

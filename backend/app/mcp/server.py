@@ -49,6 +49,7 @@ _TOOL_DESCRIPTIONS_ZH = {
     "list_metric_categories": "查询指标分类及其编码。",
     "list_cube_models": "查询Cube模型及真实数据源、维度、度量和时间维度。",
     "get_cube_model": "查看单个Cube模型的完整配置。",
+    "refresh_cube": "重启Cube服务并加载已提交的Cube模型，操作前需要人工确认。",
     "list_metric_definitions": "查询原子指标、派生指标和复合指标定义。",
     "preview_sql": "在指定数据源执行单条只读SQL预览，最多返回200行。",
     "list_airflow_dags": "查询Airflow DAG及其启停状态。",
@@ -472,6 +473,22 @@ async def get_cube_model(name: str) -> dict:
             raise ValueError("Cube model not found")
         return result
     return await _run_tool("get_cube_model", "metrics:read", {"name": name}, operation)
+
+
+@mcp.tool()
+async def refresh_cube(user_confirmation: bool = False) -> dict:
+    """Restart Cube and load committed models after explicit user confirmation."""
+    async def operation(db, principal):
+        if not user_confirmation:
+            raise ValueError("Explicit user confirmation is required before refreshing Cube")
+        result = await cube_model_service.refresh_cube()
+        if not result.get("ok"):
+            raise RuntimeError(result.get("message") or "Cube refresh failed")
+        return result
+    return await _run_tool(
+        "refresh_cube", "metrics:execute",
+        {"user_confirmation": user_confirmation}, operation,
+    )
 
 
 @mcp.tool()
@@ -1082,7 +1099,8 @@ def build_data_development_and_metrics(goal: str) -> str:
         "先读取数据源、SQL脚本、指标分类、Cube模型和指标定义；创建变更集；"
         "SQL脚本只能保存单条只读SQL且不会自动执行；Cube必须使用真实数据源名称，不能使用default；"
         "指标必须引用有效Cube度量，默认时间维度必须是time类型；调用validate_change_set并展示结果；"
-        "未经用户明确确认不得调用commit_change_set。提交Cube模型后仍需由用户决定是否刷新Cube服务。"
+        "未经用户明确确认不得调用commit_change_set。提交Cube模型后若结果提示需要刷新，先向用户说明影响；"
+        "只有再次取得明确确认后，才能调用refresh_cube并将user_confirmation设为true。"
     )
 
 
