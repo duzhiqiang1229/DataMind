@@ -40,7 +40,7 @@ docker exec airflow-scheduler sh -lc 'airflow providers list | grep -q apache-ai
 docker exec airflow-scheduler sh -lc 'test -r "$SPARK_OPENLINEAGE_JAR"'
 docker exec airflow-scheduler python -c 'import sys; sys.path.insert(0, "/opt/airflow/plugins"); from datamind_operators import DorisSQLOperator, DorisSparkSubmitOperator'
 docker exec airflow-scheduler sh -lc 'test "$(airflow config get-value openlineage namespace)" = datamind-airflow'
-docker exec airflow-scheduler sh -lc 'test "$(airflow config get-value openlineage disabled)" = False'
+docker exec airflow-scheduler sh -lc 'test "$(airflow config get-value openlineage disabled | tr "[:upper:]" "[:lower:]")" = false'
 docker exec airflow-scheduler python -c 'import json, os, urllib.request; request = urllib.request.Request("http://backend:8000/api/v1/internal/openlineage/health", headers={"Authorization": "Bearer " + os.environ["LINEAGE_EVENT_TOKEN"]}); assert json.load(urllib.request.urlopen(request, timeout=10))["status"] == "ok"'
 version=$(tr -d '\r\n' < "$project_root/VERSION")
 curl --fail --silent "http://127.0.0.1:$backend_port/health" | grep -q "\"version\":\"$version\""
