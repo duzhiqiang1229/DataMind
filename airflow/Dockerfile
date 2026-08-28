@@ -2,9 +2,15 @@ FROM apache/airflow:3.3.1-python3.12
 
 ARG OPENLINEAGE_SPARK_VERSION=1.52.0
 ARG OPENLINEAGE_SCALA_VERSIONS="2.12 2.13"
+ARG DEBIAN_MIRROR=https://mirrors.aliyun.com/debian
+ARG DEBIAN_SECURITY_MIRROR=https://mirrors.aliyun.com/debian-security
 
 USER root
-RUN apt-get update \
+RUN sed -i \
+        -e "s|http://deb.debian.org/debian-security|${DEBIAN_SECURITY_MIRROR}|g" \
+        -e "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}|g" \
+        /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
