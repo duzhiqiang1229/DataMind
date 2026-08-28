@@ -16,6 +16,16 @@ def _table_name(value: str, default_database: str | None) -> str:
     return ".".join(parts)
 
 
+def _datasource_for_table(
+    table_name: str,
+    datasource_name: str,
+    datasource_mapping: dict[str, str],
+) -> str:
+    parts = [part.strip("`\" ") for part in table_name.split(".") if part.strip("`\" ")]
+    database = parts[-2].lower() if len(parts) >= 2 else ""
+    return datasource_mapping.get(database, datasource_name)
+
+
 class DorisSparkSubmitOperator(SparkSubmitOperator):
     """Submit a Doris PySpark job and expose its table lineage to OpenLineage.
 
@@ -30,6 +40,7 @@ class DorisSparkSubmitOperator(SparkSubmitOperator):
         "input_tables",
         "output_tables",
         "datasource_name",
+        "datasource_mapping",
         "default_database",
     )
 
@@ -39,12 +50,17 @@ class DorisSparkSubmitOperator(SparkSubmitOperator):
         input_tables: list[str] | tuple[str, ...] | None = None,
         output_tables: list[str] | tuple[str, ...] | None = None,
         datasource_name: str = "Doris 数仓",
+        datasource_mapping: dict[str, str] | None = None,
         default_database: str | None = None,
         **kwargs,
     ) -> None:
         self.input_tables = list(input_tables or [])
         self.output_tables = list(output_tables or [])
         self.datasource_name = datasource_name
+        self.datasource_mapping = {
+            str(database).lower(): str(source_name)
+            for database, source_name in (datasource_mapping or {}).items()
+        }
         self.default_database = default_database
 
         lineage_jar = os.environ.get("SPARK_OPENLINEAGE_JAR", DEFAULT_OPENLINEAGE_JAR)
@@ -71,15 +87,16 @@ class DorisSparkSubmitOperator(SparkSubmitOperator):
         from airflow.providers.openlineage.extractors import OperatorLineage
         from openlineage.client.event_v2 import Dataset
 
-        namespace = f"datamind://datasource/{quote(self.datasource_name, safe='')}"
-        inputs = [
-            Dataset(namespace=namespace, name=name)
-            for name in (_table_name(item, self.default_database) for item in self.input_tables)
-            if name
-        ]
-        outputs = [
-            Dataset(namespace=namespace, name=name)
-            for name in (_table_name(item, self.default_database) for item in self.output_tables)
-            if name
-        ]
+        def dataset(value: str) -> Dataset | None:
+            name = _table_name(value, self.default_database)
+            if not name:
+                return None
+            source_name = _datasource_for_table(
+                name, self.datasource_name, self.datasource_mapping
+            )
+            namespace = f"datamind://datasource/{quote(source_name, safe='')}"
+            return Dataset(namespace=namespace, name=name)
+
+        inputs = [item for value in self.input_tables if (item := dataset(value))]
+        outputs = [item for value in self.output_tables if (item := dataset(value))]
         return OperatorLineage(inputs=inputs, outputs=outputs)
