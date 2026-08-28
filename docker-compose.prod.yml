@@ -6,7 +6,7 @@
 name: datamind
 
 x-airflow-common: &airflow-common
-  image: datamind-airflow:${DATAMIND_VERSION:-1.1.2}
+  image: datamind-airflow:${DATAMIND_VERSION:-1.1.3}
   env_file:
     - ./.env
   environment: &airflow-common-env
@@ -30,9 +30,13 @@ x-airflow-common: &airflow-common
     AIRFLOW__OPENLINEAGE__SPARK_INJECT_PARENT_JOB_INFO: "true"
     AIRFLOW__OPENLINEAGE__SPARK_INJECT_TRANSPORT_INFO: "true"
     DATAMIND_API_URL: http://backend:8000
-    JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+    # Production host compatibility: Spark 3.4.4 / Scala 2.12 / Java 8.
+    JAVA_HOME: /usr/lib/jvm/java-1.8.0-openjdk
+    SPARK_HOME: /home/spark
+    SPARK_OPENLINEAGE_JAR: /opt/airflow/jars/openlineage-spark_2.12-1.52.0.jar
+    PATH: /home/airflow/.local/bin:/usr/python/bin:/usr/lib/jvm/java-1.8.0-openjdk/bin:/home/spark/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     PYSPARK_PYTHON: python
-    SPARK_LOCAL_IP: 127.0.0.1
+    SPARK_LOCAL_IP: 172.21.0.10
     SPARK_LOCAL_DIRS: /tmp/spark
     TZ: Asia/Shanghai
   user: "${AIRFLOW_UID:-50000}:0"
@@ -42,6 +46,10 @@ x-airflow-common: &airflow-common
     - ./airflow/plugins:/opt/airflow/plugins
     - ./airflow/config:/opt/airflow/config
     - ./airflow/scripts:/opt/airflow/scripts:ro
+    - /opt/etljob:/opt/etljob:ro
+    - /home/spark:/home/spark:ro
+    - /usr/lib/jvm/java-1.8.0-openjdk:/usr/lib/jvm/java-1.8.0-openjdk:ro
+    - /usr/share/javazi-1.8:/usr/share/javazi-1.8:ro
 
 services:
   # PostgreSQL - platform database
@@ -92,7 +100,7 @@ services:
 
   # Backend - FastAPI
   backend:
-    image: datamind-backend:${DATAMIND_VERSION:-1.1.2}
+    image: datamind-backend:${DATAMIND_VERSION:-1.1.3}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -107,7 +115,7 @@ services:
       - REDIS_PORT=6379
       - APP_DEBUG=false
       - APP_ENV=production
-      - APP_VERSION=${DATAMIND_VERSION:-1.1.2}
+      - APP_VERSION=${DATAMIND_VERSION:-1.1.3}
       - DATAMIND_IN_DOCKER=true
       - EXECUTOR_URL=http://executor:8010
       - CUBE_COMPOSE_DIR=/datamind
@@ -141,7 +149,7 @@ services:
 
   # DataMind MCP - agent-facing Streamable HTTP server.
   mcp-server:
-    image: datamind-backend:${DATAMIND_VERSION:-1.1.2}
+    image: datamind-backend:${DATAMIND_VERSION:-1.1.3}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -160,8 +168,9 @@ services:
       - REDIS_PORT=6379
       - APP_DEBUG=false
       - APP_ENV=production
-      - APP_VERSION=${DATAMIND_VERSION:-1.1.2}
+      - APP_VERSION=${DATAMIND_VERSION:-1.1.3}
       - DATAMIND_IN_DOCKER=true
+      - EXECUTOR_URL=http://executor:8010
       - AIRFLOW_DAGS_PATH=/airflow/dags
       - CUBE_MODEL_CUBES_DIR=/datamind/cube/model/cubes
       - CUBE_MODEL_VIEWS_DIR=/datamind/cube/model/views
@@ -181,7 +190,7 @@ services:
 
   # Restricted executor - the only service allowed to access Docker Engine.
   executor:
-    image: datamind-backend:${DATAMIND_VERSION:-1.1.2}
+    image: datamind-backend:${DATAMIND_VERSION:-1.1.3}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -213,7 +222,7 @@ services:
 
   # Frontend - Nginx serving built Vue app + API proxy
   frontend:
-    image: datamind-frontend:${DATAMIND_VERSION:-1.1.2}
+    image: datamind-frontend:${DATAMIND_VERSION:-1.1.3}
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -232,7 +241,8 @@ services:
 
   # Cube 语义层（模型文件挂载自 ./cube/model）
   cubestore:
-    image: cubejs/cubestore@sha256:5955974839b21dd7fbfb5f7bfa2781ae4ba204bdd3f12c16939d728db2755afe
+    # Production CPU lacks AVX; this pinned CubeStore build is verified on the host.
+    image: cubejs/cubestore@sha256:59e9741d27483eda7f16536fe0c0751f2eba554ff3cb2ee715a1811e1b8cd728
     container_name: cubestore
     restart: unless-stopped
     environment:
@@ -278,6 +288,10 @@ services:
   airflow-api-server:
     <<: *airflow-common
     container_name: airflow-api-server
+    networks:
+      default: {}
+      airflow_spark:
+        ipv4_address: 172.21.0.11
     restart: unless-stopped
     command: api-server
     ports:
@@ -294,6 +308,10 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     container_name: airflow-scheduler
+    networks:
+      default: {}
+      airflow_spark:
+        ipv4_address: 172.21.0.10
     restart: unless-stopped
     command: scheduler
     depends_on:
@@ -308,6 +326,10 @@ services:
   airflow-dag-processor:
     <<: *airflow-common
     container_name: airflow-dag-processor
+    networks:
+      default: {}
+      airflow_spark:
+        ipv4_address: 172.21.0.12
     restart: unless-stopped
     command: dag-processor
     depends_on:
@@ -317,6 +339,10 @@ services:
   airflow-triggerer:
     <<: *airflow-common
     container_name: airflow-triggerer
+    networks:
+      default: {}
+      airflow_spark:
+        ipv4_address: 172.21.0.13
     restart: unless-stopped
     command: triggerer
     depends_on:
@@ -327,3 +353,10 @@ volumes:
   postgres_data:
   redis_data:
   cubestore_data:
+
+networks:
+  default:
+  airflow_spark:
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24

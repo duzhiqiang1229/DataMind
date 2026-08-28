@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # --- Application ---
     APP_NAME: str = "DataMind"
-    APP_VERSION: str = "1.1.2"
+    APP_VERSION: str = "1.1.3"
     APP_ENV: str = "development"
     APP_DEBUG: bool = True
     APP_HOST: str = "0.0.0.0"
