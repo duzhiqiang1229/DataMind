@@ -1,6 +1,14 @@
-# DataMind 1.1.2 正式发布基线
+# DataMind 1.1.3 正式发布基线
 
-发布日期：2026-08-27
+发布日期：2026-08-28
+
+## 1.1.3 新增与部署适配
+
+- MCP新增经人工确认的Cube刷新工具，并使用独立的 `metrics:execute` 授权范围。
+- MCP通过受限Executor重启Cube，不直接挂载Docker Socket。
+- 生产部署适配Spark 3.4.4、Scala 2.12、Java 8与固定Spark容器网段。
+- Airflow镜像同时包含Scala 2.12和2.13版本的OpenLineage Spark Listener。
+- CubeStore固定为已在无AVX生产CPU上验证通过的镜像摘要。
 
 ## 1.1.2 修复
 
@@ -43,8 +51,8 @@ OpenMetadata、DataX、独立 Spark 集群组件和旧 ETL 页面不属于本发
 ## 固化策略
 
 - 产品版本由 `VERSION`、`.env` 中的 `APP_VERSION` 和 `DATAMIND_VERSION` 共同确定。
-- DataMind 后端、MCP、执行器共用 `datamind-backend:1.1.2` 镜像。
-- 前端使用 `datamind-frontend:1.1.2`，Airflow 使用 `datamind-airflow:1.1.2`。
+- DataMind 后端、MCP、执行器共用 `datamind-backend:1.1.3` 镜像。
+- 前端使用 `datamind-frontend:1.1.3`，Airflow 使用 `datamind-airflow:1.1.3`。
 - PostgreSQL、Redis、Cube 与 Cube Store 使用不可漂移的镜像摘要。
 - Python、Airflow Provider 与前端 npm 依赖均使用锁定版本或锁文件。
 - `.env`、运行日志、Airflow 密码文件和数据库备份不纳入 Git。
@@ -73,7 +81,7 @@ sh scripts/release.sh
 
 - Compose 配置可以解析，12 个常驻服务全部运行。
 - DataMind、后端、MCP、Cube、Airflow 健康接口全部返回 HTTP 200。
-- 后端报告版本 `1.1.2`。
+- 后端报告版本 `1.1.3`。
 - Alembic 当前数据库版本为唯一 `head`。
 - PostgreSQL 备份文件大于 1 KB，并生成 SHA-256 校验文件。
 
