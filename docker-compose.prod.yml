@@ -48,6 +48,9 @@ x-airflow-common: &airflow-common
     - ./airflow/scripts:/opt/airflow/scripts:ro
     - /opt/etljob:/opt/etljob:ro
     - /home/spark:/home/spark:ro
+    # Spark event logging is enabled in spark-defaults.conf, so the driver
+    # needs this subdirectory writable while the Spark installation stays read-only.
+    - /home/spark/event-logs:/home/spark/event-logs
     - /usr/lib/jvm/java-1.8.0-openjdk:/usr/lib/jvm/java-1.8.0-openjdk:ro
     - /usr/share/javazi-1.8:/usr/share/javazi-1.8:ro
 
