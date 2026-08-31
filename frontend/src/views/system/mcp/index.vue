@@ -8,11 +8,6 @@
       <el-button type="primary" :icon="Plus" @click="openCreate">新建客户端</el-button>
     </div>
 
-    <el-alert type="info" :closable="false" show-icon class="endpoint-alert">
-      <template #title>Streamable HTTP 地址：<el-text tag="code">{{ mcpEndpoint }}</el-text></template>
-      支持数据建模、SQL预览、Airflow调度、物理表目录、运行血缘、数据质量、Cube建模、指标建设和数据服务。写操作先进入变更集；执行和发布类操作均需明确确认。
-    </el-alert>
-
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane label="变更集中心" name="changes"><ChangeSetCenter ref="changeSetCenterRef" /></el-tab-pane>
       <el-tab-pane label="功能清单" name="capabilities">
@@ -147,7 +142,6 @@ const selectedClient = ref<any>(null); const tokenName = ref(""); const oneTimeS
 const editingScopes = ref<string[]>([]);
 const createForm = reactive({ client_name: "", client_code: "", service_user_id: "", scopes: [...scopeOptions] });
 const rules = { client_name: [{ required: true, message: "请输入客户端名称", trigger: "blur" }], client_code: [{ required: true, pattern: /^[A-Za-z0-9_-]+$/, message: "仅支持字母、数字、下划线和短横线", trigger: "blur" }], service_user_id: [{ required: true, message: "请选择服务用户", trigger: "change" }] };
-const mcpEndpoint = computed(() => `${window.location.protocol}//${window.location.hostname}:8001/mcp`);
 const filteredCapabilities = computed(() => { const keyword = capabilityKeyword.value.trim().toLowerCase(); return capabilities.value.filter((item:any) => (!moduleFilter.value || item.module === moduleFilter.value) && (!keyword || `${item.name} ${item.description} ${item.scope}`.toLowerCase().includes(keyword))); });
 
 async function loadClients() { loading.value = true; try { clients.value = await mcpManagementApi.clients() || []; } finally { loading.value = false; } }
@@ -172,7 +166,6 @@ onMounted(async () => { await Promise.all([loadClients(), loadUsers()]); });
 <style scoped lang="scss">
 .mcp-page { padding: 4px; }
 .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; h2 { margin:0 0 7px; font-size:20px; } p { margin:0; color:var(--el-text-color-secondary); font-size:13px; } }
-.endpoint-alert { margin-bottom:18px; line-height:1.6; code { margin-left:4px; } }
 .scope-tag { margin:2px 6px 2px 0; }
 .token-toolbar { display:flex; justify-content:flex-end; margin-bottom:14px; }
 .secret-box { display:flex; gap:10px; margin-top:18px; }

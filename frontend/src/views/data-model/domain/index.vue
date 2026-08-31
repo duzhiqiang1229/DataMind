@@ -1,13 +1,5 @@
 <template>
   <div class="domain-page">
-    <el-alert
-      title="数据域用于划定数据责任边界；业务过程和模型必须归属到一个数据域。"
-      type="info"
-      :closable="false"
-      show-icon
-      class="guide"
-    />
-
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
@@ -137,7 +129,6 @@ onMounted(loadData);
 
 <style lang="scss" scoped>
 .domain-page { display: flex; flex-direction: column; gap: 16px; }
-.guide { border-radius: 8px; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .title { font-size: 16px; font-weight: 600; }
 .subtitle { margin-top: 4px; font-size: 13px; color: var(--el-text-color-secondary); }

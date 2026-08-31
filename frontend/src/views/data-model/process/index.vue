@@ -1,12 +1,5 @@
 <template>
   <div class="process-page">
-    <el-alert
-      title="业务过程描述企业实际发生的业务活动，是事实模型和汇总模型的归属依据。"
-      type="info"
-      :closable="false"
-      show-icon
-    />
-
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
