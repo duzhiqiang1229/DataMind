@@ -237,7 +237,6 @@ function selectMetric(m: any) {
   query.dateRange = [];
   query.filters = [];
   queryResult.value = null;
-  executeQuery();
 }
 
 function onCubeChange() {
