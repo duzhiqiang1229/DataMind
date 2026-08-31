@@ -40,6 +40,11 @@ x-airflow-common: &airflow-common
     SPARK_LOCAL_DIRS: /tmp/spark
     TZ: Asia/Shanghai
   user: "${AIRFLOW_UID:-50000}:0"
+  # The source API is business-critical and the host's Docker DNS occasionally
+  # returns a transient lookup failure. Pin the currently assigned address so
+  # task retries do not fail solely because of Docker's embedded DNS.
+  extra_hosts:
+    - "api.weipeng.cloud:123.57.19.161"
   volumes:
     - ./airflow/dags:/opt/airflow/dags
     - ./airflow/logs:/opt/airflow/logs
@@ -47,6 +52,7 @@ x-airflow-common: &airflow-common
     - ./airflow/config:/opt/airflow/config
     - ./airflow/scripts:/opt/airflow/scripts:ro
     - /opt/etljob:/opt/etljob:ro
+    - /opt/data:/opt/data
     - /home/spark:/home/spark:ro
     # Spark event logging is enabled in spark-defaults.conf, so the driver
     # needs this subdirectory writable while the Spark installation stays read-only.
