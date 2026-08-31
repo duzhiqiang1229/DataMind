@@ -268,26 +268,32 @@ function resetQuery() {
   queryResult.value = null;
 }
 
+function qualifyMember(member: string): string {
+  const value = String(member || "").trim();
+  if (!value || value.includes(".") || !queryCubeName.value) return value;
+  return `${queryCubeName.value}.${value}`;
+}
+
 async function executeQuery() {
   if (query.measures.length === 0) {
     ElMessage.warning("请选择至少一个度量");
     return;
   }
   const cubeQuery: any = {
-    measures: query.measures,
-    dimensions: query.dimensions,
+    measures: query.measures.map(qualifyMember),
+    dimensions: query.dimensions.map(qualifyMember),
     limit: query.limit,
   };
   const filters = query.filters.filter((f) => f.member && f.values[0] !== "");
   if (filters.length) {
     cubeQuery.filters = filters.map((f) => ({
-      member: f.member,
+      member: qualifyMember(f.member),
       operator: f.operator,
       values: [f.values[0]],
     }));
   }
   if (query.timeDimension) {
-    const td: any = { dimension: query.timeDimension, granularity: query.granularity };
+    const td: any = { dimension: qualifyMember(query.timeDimension), granularity: query.granularity };
     if (query.dateRange.length === 2) {
       td.dateRange = query.dateRange;
     }
@@ -347,9 +353,9 @@ function renderChart() {
       chartInstance = echarts.init(chartRef.value);
     }
     const rows = queryResult.value.data || [];
-    const measures = query.measures;
+    const measures = query.measures.map(qualifyMember);
     const isTime = !!query.timeDimension;
-    const xKey = query.timeDimension || query.dimensions[0] || "";
+    const xKey = qualifyMember(query.timeDimension || query.dimensions[0] || "");
     const xData = rows.map((r: any) => fmtX(xKey, r[xKey], isTime));
     const series = measures.map((m: string) => ({
       name: columnLabel(m),

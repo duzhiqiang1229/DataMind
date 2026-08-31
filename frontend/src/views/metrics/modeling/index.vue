@@ -449,23 +449,28 @@ function selectedTableRef() {
   const ds = selectedDatasource();
   let table = cubeForm.sql_table || "";
   let schema = ds?.default_schema;
+  let database = ds?.database_name;
   if (ds?.source_type === "postgresql" && table.includes(".")) {
     const parts = table.split(".");
     table = parts.pop() || "";
     schema = parts.join(".") || schema;
+  } else if ((ds?.source_type === "mysql" || ds?.source_type === "doris") && table.includes(".")) {
+    const parts = table.split(".");
+    table = parts.pop() || "";
+    database = parts.pop() || database;
   }
-  return { table, schema };
+  return { table, schema, database };
 }
 
 async function loadSourceColumns(showMessage = false) {
   const ds = selectedDatasource();
-  const { table, schema } = selectedTableRef();
+  const { table, schema, database } = selectedTableRef();
   sourceColumns.value = [];
   if (!ds || !table) return;
 
   columnsLoading.value = true;
   try {
-    const columns = await datasourceApi.getColumns(ds.id, table, schema);
+    const columns = await datasourceApi.getColumns(ds.id, table, schema, database);
     sourceColumns.value = (columns || []).map((column: any) => {
       const dbType = String(column.type || column.column_type || "");
       const nullable = String(column.null ?? column.is_nullable ?? "").toUpperCase() === "YES";

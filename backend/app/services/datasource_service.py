@@ -358,14 +358,26 @@ async def get_table_columns(
     password = decrypt_value(ds.password_encrypted)
 
     if ds.source_type in ("mysql", "doris"):
+        parts = [part.strip().strip("`") for part in table_name.split(".") if part.strip()]
+        if not parts or len(parts) > 2:
+            raise ValueError("表名格式无效，应为 table 或 database.table")
+        physical_table = parts[-1]
+        effective_database = parts[-2] if len(parts) == 2 else (database or ds.database_name or "")
+
+        def quote_identifier(value: str) -> str:
+            return f"`{value.replace('`', '``')}`"
+
         import pymysql
         conn = pymysql.connect(
             host=ds.host, port=ds.port, user=ds.username,
-            password=password, database=database or ds.database_name or "",
+            password=password, database=effective_database,
             connect_timeout=10,
         )
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute(f"DESC `{table_name}`")
+        qualified_table = quote_identifier(physical_table)
+        if effective_database:
+            qualified_table = f"{quote_identifier(effective_database)}.{qualified_table}"
+        cursor.execute(f"DESC {qualified_table}")
         cols = cursor.fetchall()
         conn.close()
         return [{
