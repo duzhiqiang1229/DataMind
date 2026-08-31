@@ -466,6 +466,7 @@ async def sync_dag_runs(db: AsyncSession) -> dict:
                 )
             )
             row = existing.scalar_one_or_none()
+            collect_lineage = row is None or row.lineage_status == "pending"
             if row:
                 row.state = run.get("state")
                 row.start_date = start
@@ -485,11 +486,12 @@ async def sync_dag_runs(db: AsyncSession) -> dict:
                     duration_seconds=duration,
                 )
                 db.add(row)
-            if run.get("state") in {"success", "failed"} and row.lineage_status == "pending":
+            if run.get("state") in {"success", "failed"}:
                 lineage_candidates.append({
                     "dag_id": dag_id, "dag_run_id": run_id, "dag_state": run.get("state"),
                     "run_type": run.get("run_type"),
                     "execution_date": _parse(run.get("logical_date") or run.get("execution_date")),
+                    "collect_lineage": collect_lineage,
                 })
             total += 1
     await db.commit()
@@ -535,15 +537,19 @@ async def sync_dag_runs(db: AsyncSession) -> dict:
             task_id = task.get("task_id")
             if not task_id:
                 continue
-            log = ""
-            try:
-                log = await airflow.get_task_log(
-                    candidate["dag_id"], candidate["dag_run_id"], task_id,
-                    max(int(task.get("try_number") or 1), 1),
-                )
-            except Exception as exc:
-                logger.debug(f"[airflow] task log unavailable for {task_id}: {exc}")
-            input_tables, output_tables, executed_sql = _extract_log_lineage(log)
+            input_tables: list[str] = []
+            output_tables: list[str] = []
+            executed_sql = ""
+            if candidate["collect_lineage"]:
+                log = ""
+                try:
+                    log = await airflow.get_task_log(
+                        candidate["dag_id"], candidate["dag_run_id"], task_id,
+                        max(int(task.get("try_number") or 1), 1),
+                    )
+                except Exception as exc:
+                    logger.debug(f"[airflow] task log unavailable for {task_id}: {exc}")
+                input_tables, output_tables, executed_sql = _extract_log_lineage(log)
             try:
                 await ingest_event(db, {
                     **candidate, "task_id": task_id,
@@ -553,7 +559,9 @@ async def sync_dag_runs(db: AsyncSession) -> dict:
                     "sql": executed_sql,
                     "input_tables": input_tables, "output_tables": output_tables,
                     "start_date": _parse(task.get("start_date")),
+                    "start_date_authoritative": True,
                     "end_date": _parse(task.get("end_date")),
+                    "merge_lineage": not candidate["collect_lineage"],
                     "error_message": None if state == "success" else f"Airflow task state: {state}",
                 })
                 collected_tasks += 1

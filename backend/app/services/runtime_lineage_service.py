@@ -207,7 +207,9 @@ async def ingest_event(db: AsyncSession, payload: dict) -> dict:
     if payload.get("error_message"):
         task_run.error_message = payload["error_message"]
     if payload.get("start_date") and (
-        task_run.start_date is None or payload["start_date"] < task_run.start_date
+        payload.get("start_date_authoritative")
+        or task_run.start_date is None
+        or payload["start_date"] < task_run.start_date
     ):
         task_run.start_date = payload["start_date"]
     if payload.get("end_date"):

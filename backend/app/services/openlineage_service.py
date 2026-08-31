@@ -60,7 +60,14 @@ def extract_airflow_identity(event: dict) -> dict | None:
         "try_number": try_number,
         "run_type": str(dag_run.get("run_type")) if dag_run.get("run_type") else None,
         "execution_date": _iso_datetime(dag_run.get("logical_date") or dag_run.get("execution_date")),
-        "start_date": _iso_datetime(dag_run.get("start_date")),
+        # dagRun.start_date is the start of the whole DAG and is identical for
+        # every task.  Using it here collapses all task nodes into one visual
+        # stage and inflates task durations.  Prefer the task-instance time;
+        # when the facet does not provide one, the START event time is used by
+        # ingest_openlineage_event below.
+        "start_date": _iso_datetime(
+            task_instance.get("start_date") or task_instance.get("startDate")
+        ),
         "operator_type": task.get("operator_class") or task.get("operator_class_path"),
         "openlineage_run_id": str(run.get("runId")) if run.get("runId") else None,
         "openlineage_job_namespace": str(job.get("namespace")) if job.get("namespace") else None,
