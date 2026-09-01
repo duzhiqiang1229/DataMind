@@ -131,6 +131,7 @@
               :key="col"
               :prop="col"
               :label="columnLabel(col)"
+              :sortable="isTimeResultColumn(col)"
               min-width="130"
               show-overflow-tooltip
             />
@@ -292,11 +293,13 @@ async function executeQuery() {
     }));
   }
   if (query.timeDimension) {
-    const td: any = { dimension: qualifyMember(query.timeDimension), granularity: query.granularity };
+    const qualifiedTimeDimension = qualifyMember(query.timeDimension);
+    const td: any = { dimension: qualifiedTimeDimension, granularity: query.granularity };
     if (query.dateRange.length === 2) {
       td.dateRange = query.dateRange;
     }
     cubeQuery.timeDimensions = [td];
+    cubeQuery.order = { [qualifiedTimeDimension]: "asc" };
   }
   querying.value = true;
   try {
@@ -313,14 +316,23 @@ async function executeQuery() {
 // 结果展示
 const resultColumns = computed(() => {
   const rows = queryResult.value?.data || [];
-  return rows[0] ? Object.keys(rows[0]) : [];
+  if (!rows[0]) return [];
+  const granularTimeKey = query.timeDimension && query.granularity
+    ? `${qualifyMember(query.timeDimension)}.${query.granularity}`
+    : "";
+  return Object.keys(rows[0]).filter((column) => column !== granularTimeKey);
 });
+
+function isTimeResultColumn(column: string): boolean {
+  return !!query.timeDimension && column === qualifyMember(query.timeDimension);
+}
 
 function columnLabel(key: string): string {
   const ann = queryResult.value?.annotation || {};
   return (
     ann.measures?.[key]?.shortTitle ||
     ann.dimensions?.[key]?.shortTitle ||
+    ann.timeDimensions?.[key]?.shortTitle ||
     String(key).split(".").pop() ||
     key
   );
