@@ -776,7 +776,7 @@ async def get_call_stats(db: AsyncSession, days: int = 7) -> dict:
         "total_calls": int(totals.total_calls or 0),
         "success_count": int(totals.success_count or 0),
         "failed_count": int(totals.failed_count or 0),
-        "avg_elapsed_ms": float(avg_ms) if avg_ms is not None else 0,
+        "avg_elapsed_ms": int(round(float(avg_ms))) if avg_ms is not None else 0,
         "daily_trend": daily_trend,
     }
 

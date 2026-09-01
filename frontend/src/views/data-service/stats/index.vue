@@ -38,7 +38,7 @@
         <el-col :span="6">
           <div class="stat-card avg">
             <div class="stat-label">平均耗时(ms)</div>
-            <div class="stat-value">{{ stats.avg_elapsed_ms ?? 0 }}</div>
+            <div class="stat-value">{{ formatAverageElapsed(stats.avg_elapsed_ms) }}</div>
           </div>
         </el-col>
       </el-row>
@@ -144,6 +144,12 @@ const formatStatus = (status: string): string => {
   if (s === "success" || s === "200" || s === "ok") return "成功";
   if (s === "failed" || s === "error" || s === "500") return "失败";
   return status || "—";
+};
+
+const formatAverageElapsed = (value?: number): string => {
+  const milliseconds = Number(value ?? 0);
+  if (!Number.isFinite(milliseconds)) return "0";
+  return Math.round(milliseconds).toLocaleString("zh-CN");
 };
 
 const loadStats = async () => {
