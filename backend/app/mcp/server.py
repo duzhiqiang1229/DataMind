@@ -87,6 +87,7 @@ _TOOL_DESCRIPTIONS_ZH = {
     "create_metric_category_draft": "在变更集中新增指标分类草稿。",
     "create_cube_model_draft": "在变更集中新增使用真实数据源的Cube模型草稿。",
     "create_metric_definition_draft": "在变更集中新增原子、派生或复合指标草稿。",
+    "update_metric_definition_draft": "按指标编码更新现有指标定义，变更先进入变更集并经校验、确认后提交。",
     "create_airflow_sql_dag_draft": "在变更集中新增INSERT INTO SELECT类型的Airflow SQL任务草稿。",
     "create_data_service_draft": "在变更集中新增物理表、自定义SQL或指标数据API草稿。",
     "create_quality_rule_draft": "在变更集中新增非空、唯一、范围或自定义SQL质量规则草稿。",
@@ -985,6 +986,37 @@ async def create_metric_definition_draft(
     async def operation(db, principal):
         return await mcp_service.add_change_item(db, principal, uuid.UUID(change_set_id), "metric_definition", payload)
     return await _run_tool("create_metric_definition_draft", "metrics:draft", {"change_set_id": change_set_id, **payload}, operation)
+
+
+@mcp.tool()
+async def update_metric_definition_draft(
+    change_set_id: str, metric_code: str, metric_name: str | None = None,
+    metric_type: str | None = None, cube_name: str | None = None,
+    cube_measure: str | None = None, category_code: str | None = None,
+    dimensions: list[str] | None = None, default_time_dimension: str | None = None,
+    calculation: str | None = None, business_domain: str | None = None,
+    unit: str | None = None, description: str | None = None,
+    clear_fields: list[str] | None = None,
+) -> dict:
+    """Stage changes to an existing metric definition; metric lifecycle status is preserved."""
+    values = {
+        "metric_name": metric_name, "metric_type": metric_type,
+        "cube_name": cube_name, "cube_measure": cube_measure,
+        "category_code": category_code, "dimensions": dimensions,
+        "default_time_dimension": default_time_dimension, "calculation": calculation,
+        "business_domain": business_domain, "unit": unit, "description": description,
+    }
+    changes = {key: value for key, value in values.items() if value is not None}
+    args = {
+        "change_set_id": change_set_id, "metric_code": metric_code,
+        **changes, "clear_fields": clear_fields or [],
+    }
+
+    async def operation(db, principal):
+        return await mcp_service.add_metric_definition_update_item(
+            db, principal, uuid.UUID(change_set_id), metric_code.strip(), changes, clear_fields,
+        )
+    return await _run_tool("update_metric_definition_draft", "metrics:draft", args, operation)
 
 
 @mcp.tool()

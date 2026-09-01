@@ -168,7 +168,8 @@ async def create_change_set(
 
 async def add_change_item(
     db: AsyncSession, principal: dict, change_set_id: uuid.UUID,
-    object_type: str, payload: dict,
+    object_type: str, payload: dict, action: str = "create",
+    object_id: uuid.UUID | None = None,
 ) -> dict:
     change_set = await _owned_change_set(db, principal, change_set_id)
     if change_set.status != "draft":
@@ -180,18 +181,78 @@ async def add_change_item(
     }
     if object_type not in allowed:
         raise ValueError(f"暂不支持的变更对象: {object_type}")
+    if action not in {"create", "update"}:
+        raise ValueError(f"暂不支持的变更动作: {action}")
     next_order = (await db.execute(select(func.coalesce(func.max(McpChangeSetItem.sort_order), 0)).where(
         McpChangeSetItem.change_set_id == change_set_id
     ))).scalar_one() + 1
     item = McpChangeSetItem(
-        change_set_id=change_set_id, object_type=object_type, action="create",
-        payload=payload, sort_order=next_order,
+        change_set_id=change_set_id, object_type=object_type, action=action,
+        object_id=object_id, payload=payload, sort_order=next_order,
     )
     db.add(item)
     change_set.validation_status = "pending"
     await db.commit()
     await db.refresh(item)
-    return {"item_id": str(item.id), "object_type": object_type, "status": "draft", "payload": payload}
+    return {
+        "item_id": str(item.id), "object_type": object_type, "action": action,
+        "object_id": str(object_id) if object_id else None,
+        "status": "draft", "payload": payload,
+    }
+
+
+async def add_metric_definition_update_item(
+    db: AsyncSession, principal: dict, change_set_id: uuid.UUID,
+    metric_code: str, changes: dict, clear_fields: list[str] | None = None,
+) -> dict:
+    """Stage a complete, reviewable snapshot for an existing metric update."""
+    metric = (await db.execute(select(MetricDefinition).where(
+        MetricDefinition.metric_code == metric_code,
+    ))).scalar_one_or_none()
+    if not metric:
+        raise ValueError(f"指标不存在: {metric_code}")
+
+    allowed_fields = {
+        "metric_name", "metric_type", "cube_name", "cube_measure", "category_code",
+        "dimensions", "default_time_dimension", "calculation", "business_domain",
+        "unit", "description",
+    }
+    clearable_fields = {
+        "category_code", "default_time_dimension", "calculation", "business_domain",
+        "unit", "description",
+    }
+    unknown_fields = set(changes) - allowed_fields
+    if unknown_fields:
+        raise ValueError(f"不支持更新的指标字段: {', '.join(sorted(unknown_fields))}")
+    requested_clear_fields = set(clear_fields or [])
+    invalid_clear_fields = requested_clear_fields - clearable_fields
+    if invalid_clear_fields:
+        raise ValueError(f"不支持清空的指标字段: {', '.join(sorted(invalid_clear_fields))}")
+    if not changes and not requested_clear_fields:
+        raise ValueError("至少需要提供一个要更新或清空的字段")
+
+    category_code = None
+    if metric.category_id:
+        category_code = (await db.execute(select(MetricCategory.category_code).where(
+            MetricCategory.id == metric.category_id,
+        ))).scalar_one_or_none()
+    payload = {
+        "metric_code": metric.metric_code, "metric_name": metric.metric_name,
+        "metric_type": metric.metric_type, "cube_name": metric.cube_name,
+        "cube_measure": metric.cube_measure, "category_code": category_code,
+        "dimensions": metric.dimensions or [],
+        "default_time_dimension": metric.default_time_dimension,
+        "calculation": metric.calculation, "business_domain": metric.business_domain,
+        "unit": metric.unit, "description": metric.description,
+        "_base_updated_at": metric.updated_at.isoformat() if metric.updated_at else None,
+    }
+    payload.update(changes)
+    for field in requested_clear_fields:
+        payload[field] = None
+    return await add_change_item(
+        db, principal, change_set_id, "metric_definition", payload,
+        action="update", object_id=metric.id,
+    )
 
 
 async def get_change_set(db: AsyncSession, principal: dict, change_set_id: uuid.UUID) -> dict:
@@ -209,7 +270,11 @@ async def validate_change_set(db: AsyncSession, principal: dict, change_set_id: 
     existing_models = set((await db.execute(select(DataModel.model_code))).scalars().all())
     existing_scripts = set((await db.execute(select(EtlScript.script_code))).scalars().all())
     existing_categories = set((await db.execute(select(MetricCategory.category_code))).scalars().all())
-    existing_metrics = set((await db.execute(select(MetricDefinition.metric_code))).scalars().all())
+    existing_metric_rows = (await db.execute(select(
+        MetricDefinition.id, MetricDefinition.metric_code, MetricDefinition.updated_at,
+    ))).all()
+    existing_metrics = {row.metric_code for row in existing_metric_rows}
+    existing_metrics_by_id = {row.id: row for row in existing_metric_rows}
     existing_service_codes = set((await db.execute(select(DataServiceApi.service_code))).scalars().all())
     existing_cubes = {item["name"]: item for item in cube_model_service.list_models()["cubes"]}
     datasource_types = dict((await db.execute(
@@ -224,6 +289,7 @@ async def validate_change_set(db: AsyncSession, principal: dict, change_set_id: 
     draft_categories: set[str] = set()
     draft_cubes: dict[str, dict] = {}
     draft_metrics: set[str] = set()
+    updated_metric_ids: set[uuid.UUID] = set()
     draft_service_codes: set[str] = set()
     draft_quality_rules: set[tuple[str, str]] = set()
 
@@ -333,7 +399,24 @@ async def validate_change_set(db: AsyncSession, principal: dict, change_set_id: 
                 item_errors.append("metric_code仅支持字母、数字、下划线和短横线")
             if payload.get("metric_type") not in {"atomic", "derived", "composite"}:
                 item_errors.append("metric_type必须是atomic/derived/composite之一")
-            if code in existing_metrics or code in draft_metrics:
+            if item.action == "update":
+                target = existing_metrics_by_id.get(item.object_id)
+                if not target:
+                    item_errors.append("要更新的指标不存在")
+                else:
+                    if target.metric_code != code:
+                        item_errors.append("更新指标时不允许修改metric_code")
+                    base_updated_at = payload.get("_base_updated_at")
+                    current_updated_at = target.updated_at.isoformat() if target.updated_at else None
+                    if base_updated_at != current_updated_at:
+                        item_errors.append("指标已被其他操作修改，请重新生成更新草稿")
+                if item.object_id in updated_metric_ids:
+                    item_errors.append(f"同一变更集中指标重复更新: {code}")
+                if code in draft_metrics:
+                    item_errors.append(f"同一变更集中不能同时新增和更新指标: {code}")
+                if item.object_id:
+                    updated_metric_ids.add(item.object_id)
+            elif code in existing_metrics or code in draft_metrics:
                 item_errors.append(f"指标编码重复: {code}")
             if category_code and category_code not in existing_categories | declared_categories:
                 item_errors.append(f"指标分类不存在: {category_code}")
@@ -358,7 +441,8 @@ async def validate_change_set(db: AsyncSession, principal: dict, change_set_id: 
                         item_errors.append(f"默认时间维度不存在或不是time类型: {time_dimension}")
             if payload.get("metric_type") in {"derived", "composite"} and not payload.get("calculation"):
                 item_errors.append("派生指标和复合指标必须填写calculation")
-            draft_metrics.add(code)
+            if item.action == "create":
+                draft_metrics.add(code)
         elif item.object_type == "airflow_sql_dag":
             datasource_name = str(payload.get("datasource_name") or "").strip()
             if datasource_types.get(datasource_name) != "doris":
@@ -481,6 +565,7 @@ async def commit_change_set(db: AsyncSession, principal: dict, change_set_id: uu
         raise ValueError("变更集校验未通过")
     entity = await _owned_change_set(db, principal, change_set_id, include_items=True)
     created: list[dict] = []
+    updated: list[dict] = []
     domain_names = dict((await db.execute(select(DataDomain.domain_code, DataDomain.domain_name))).all())
     process_names = dict((await db.execute(select(BusinessDomain.domain_code, BusinessDomain.domain_name))).all())
 
@@ -547,6 +632,27 @@ async def commit_change_set(db: AsyncSession, principal: dict, change_set_id: uu
             created.append({"object_type": item.object_type, "object_id": payload["name"], "file": result["file"]})
             continue
         elif item.object_type == "metric_definition":
+            if item.action == "update":
+                obj = (await db.execute(select(MetricDefinition).where(
+                    MetricDefinition.id == item.object_id,
+                ))).scalar_one()
+                obj.metric_name = payload["metric_name"]
+                obj.metric_type = payload["metric_type"]
+                obj.cube_name = payload["cube_name"]
+                obj.cube_measure = payload["cube_measure"]
+                obj.category_id = category_ids.get(payload.get("category_code"))
+                obj.dimensions = payload.get("dimensions") or []
+                obj.default_time_dimension = payload.get("default_time_dimension")
+                obj.calculation = payload.get("calculation")
+                obj.business_domain = payload.get("business_domain")
+                obj.unit = payload.get("unit")
+                obj.description = payload.get("description")
+                await db.flush()
+                updated.append({
+                    "object_type": item.object_type, "object_id": str(obj.id),
+                    "metric_code": obj.metric_code,
+                })
+                continue
             obj = MetricDefinition(
                 metric_code=payload["metric_code"], metric_name=payload["metric_name"],
                 metric_type=payload["metric_type"], cube_name=payload["cube_name"],
@@ -600,7 +706,8 @@ async def commit_change_set(db: AsyncSession, principal: dict, change_set_id: uu
     await db.commit()
     return {
         "success": True, "change_set_id": str(entity.id), "status": entity.status,
-        "created": created, "cube_refresh_required": bool(created_cubes),
+        "created": created, "updated": updated,
+        "cube_refresh_required": bool(created_cubes),
         "cube_models_pending_refresh": created_cubes,
         "airflow_activation_required": bool(created_dags),
         "airflow_dags_pending_activation": created_dags,
