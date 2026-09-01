@@ -1,5 +1,7 @@
 """数据服务接口: CRUD + 执行 + 调用日志 + 权限控制。"""
 from uuid import UUID
+
+import httpx
 from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -117,6 +119,15 @@ async def execute_api(
         return ResponseOK(code=403, message=str(e))
     except ValueError as e:
         return ResponseOK(code=400, message=str(e))
+    except httpx.HTTPStatusError as e:
+        detail = ""
+        try:
+            body = e.response.json()
+            detail = str(body.get("error") or body.get("message") or "")
+        except (TypeError, ValueError):
+            detail = ""
+        message = f"Cube 查询失败：{detail}" if detail else "Cube 查询失败，请检查指标和维度配置"
+        return ResponseOK(code=400, message=message)
     except Exception as e:
         return ResponseOK(code=500, message=str(e))
 

@@ -487,6 +487,20 @@ def _normalize_params(definitions: list[dict], params: dict) -> dict:
     return normalized
 
 
+def _qualify_cube_member(cube_name: str, member: str) -> str:
+    """Return a Cube member in ``cube.member`` form without double-prefixing."""
+    value = str(member or "").strip()
+    if not value or "." in value:
+        return value
+    return f"{cube_name}.{value}"
+
+
+def _cube_member_name(member: str) -> str:
+    """Return the member portion used when validating saved short/full names."""
+    value = str(member or "").strip()
+    return value.split(".", 1)[1] if "." in value else value
+
+
 def _quote_identifier(identifier: str, source_type: str) -> str:
     parts = identifier.split(".")
     if not parts or any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", part) for part in parts):
@@ -552,19 +566,31 @@ async def _execute_metric_service(db: AsyncSession, api: DataServiceApi, params:
     cube_names = {item.cube_name for item in definitions}
     if len(cube_names) != 1:
         raise ValueError("同一指标服务中的指标必须属于同一个 Cube")
+    cube_name = next(iter(cube_names))
 
     allowed_dimensions = {
-        dimension for definition in definitions for dimension in (definition.dimensions or [])
+        _cube_member_name(dimension)
+        for definition in definitions
+        for dimension in (definition.dimensions or [])
     }
     if api.time_dimension:
-        allowed_dimensions.add(api.time_dimension)
-    invalid_dimensions = set(api.metric_dimensions or []) - allowed_dimensions
+        allowed_dimensions.add(_cube_member_name(api.time_dimension))
+    invalid_dimensions = {
+        dimension for dimension in (api.metric_dimensions or [])
+        if _cube_member_name(dimension) not in allowed_dimensions
+    }
     if invalid_dimensions:
         raise ValueError(f"指标维度配置无效: {', '.join(sorted(invalid_dimensions))}")
 
     query: dict = {
-        "measures": [item.cube_measure for item in definitions],
-        "dimensions": api.metric_dimensions or [],
+        "measures": [
+            _qualify_cube_member(item.cube_name, item.cube_measure)
+            for item in definitions
+        ],
+        "dimensions": [
+            _qualify_cube_member(cube_name, dimension)
+            for dimension in (api.metric_dimensions or [])
+        ],
         "limit": api.max_rows,
     }
     filters = []
@@ -574,14 +600,14 @@ async def _execute_metric_service(db: AsyncSession, api: DataServiceApi, params:
         parameter = config.get("parameter") or member
         if not member or parameter not in params:
             continue
-        if member not in allowed_dimensions:
+        if _cube_member_name(member) not in allowed_dimensions:
             raise ValueError(f"指标过滤维度无效: {member}")
         operator = config.get("operator", "equals")
         if operator not in allowed_operators:
             raise ValueError(f"指标过滤操作符无效: {operator}")
         value = params[parameter]
         filters.append({
-            "member": member,
+            "member": _qualify_cube_member(cube_name, member),
             "operator": operator,
             "values": [str(item) for item in value] if isinstance(value, list) else [str(value)],
         })
@@ -589,7 +615,7 @@ async def _execute_metric_service(db: AsyncSession, api: DataServiceApi, params:
         query["filters"] = filters
     if api.time_dimension:
         time_dimension: dict = {
-            "dimension": api.time_dimension,
+            "dimension": _qualify_cube_member(cube_name, api.time_dimension),
             "granularity": params.get("granularity") or api.default_granularity or "day",
         }
         start_date, end_date = params.get("start_date"), params.get("end_date")
